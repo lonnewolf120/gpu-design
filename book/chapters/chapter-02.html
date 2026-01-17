@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 2: GPU vs CPU - Architecture Deep Dive | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
+        .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; }
+        .figure-caption { font-style: italic; color: var(--muted); margin-top: 10px; text-align: center; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .comparison-table th, .comparison-table td { padding: 12px; text-align: left; border: 1px solid var(--border); }
+        .comparison-table th { background: var(--accent); color: white; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div class="chapter-nav">
+            <a href="chapter-01.html">← Chapter 1: Big Picture</a>
+            <a href="chapter-03.html">Next: Parallel Execution →</a>
+        </div>
+
+        <h1>Chapter 2: GPU vs CPU - Architecture Deep Dive</h1>
+        
+        <div class="meta" style="color: var(--muted); margin: 20px 0;">
+            <span>Part I: GPU Fundamentals</span> • 
+            <span>Reading time: ~55 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            In Chapter 1, we introduced the classroom analogy: CPUs are like one super-smart student, while GPUs 
+            are like a classroom of many students working in parallel. But what does this mean at the silicon level? 
+            How do the actual transistors, wires, and circuits differ?
+        </p>
+
+        <p>
+            In this chapter, we'll explore the fundamental architectural differences between CPUs and GPUs, 
+            understand the design tradeoffs, and see how these choices impact performance for different workloads.
+        </p>
+
+        <h2>2.1 The Chef Analogy Revisited</h2>
+
+        <p>
+            Let's expand our analogy from Chapter 1:
+        </p>
+
+        <h3>The CPU Chef</h3>
+        <p>
+            A CPU is like a master chef in a high-end restaurant who can prepare any dish. This chef has:
+        </p>
+        <ul>
+            <li><strong>Superior tools:</strong> The finest knives, gadgets, and equipment (complex control logic)</li>
+            <li><strong>Deep knowledge:</strong> Can predict what ingredients are needed next (branch prediction)</li>
+            <li><strong>Fast access:</strong> Important ingredients are within arm's reach (large caches)</li>
+            <li><strong>Adaptability:</strong> Can switch between different dishes seamlessly (context switching)</li>
+        </ul>
+
+        <p>
+            This chef can prepare a complex 12-course meal beautifully, but if you need 1,000 simple sandwiches, 
+            the chef will work hard but sequentially.
+        </p>
+
+        <h3>The GPU Kitchen</h3>
+        <p>
+            A GPU is like a massive kitchen with hundreds of line cooks. Each cook:
+        </p>
+        <ul>
+            <li><strong>Simple tools:</strong> Basic equipment, but lots of it (simple ALUs replicated)</li>
+            <li><strong>Clear instructions:</strong> Everyone follows the same recipe (SIMD/SIMT)</li>
+            <li><strong>Shared resources:</strong> Ingredients come from a central station (memory controllers)</li>
+            <li><strong>Specialization:</strong> Not great at complex tasks, but incredible at repetitive work</li>
+        </ul>
+
+        <p>
+            This kitchen can't make a complex meal well, but if you need 1,000 sandwiches, you'll get them 
+            in minutes.
+        </p>
+
+        <div class="key-takeaway">
+            <strong>Key Insight:</strong> CPU and GPU architectures optimize for different problems. The "best" 
+            architecture depends entirely on your workload.
+        </div>
+
+        <h2>2.2 Transistor Budget: Where Does the Silicon Go?</h2>
+
+        <p>
+            Modern processors have billions of transistors. The key question is: <em>How do you spend them?</em>
+        </p>
+
+        <h3>CPU Transistor Budget</h3>
+        <p>
+            A typical CPU core uses its transistors for:
+        </p>
+
+        <table class="comparison-table">
+            <tr>
+                <th>Component</th>
+                <th>% of Transistors</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td>Caches (L1/L2/L3)</td>
+                <td>~50-60%</td>
+                <td>Fast local memory to hide DRAM latency</td>
+            </tr>
+            <tr>
+                <td>Control Logic</td>
+                <td>~20-25%</td>
+                <td>Branch prediction, out-of-order execution, speculation</td>
+            </tr>
+            <tr>
+                <td>Execution Units</td>
+                <td>~15-20%</td>
+                <td>ALUs, FPUs, SIMD units</td>
+            </tr>
+            <tr>
+                <td>Other</td>
+                <td>~5-10%</td>
+                <td>Decode, fetch, register files</td>
+            </tr>
+        </table>
+
+        <p>
+            Notice that <strong>only 15-20% of transistors actually do math!</strong> The rest are spent on making 
+            that math happen as fast as possible for unpredictable, sequential code.
+        </p>
+
+        <h3>GPU Transistor Budget</h3>
+        <p>
+            A typical GPU core uses its transistors very differently:
+        </p>
+
+        <table class="comparison-table">
+            <tr>
+                <th>Component</th>
+                <th>% of Transistors</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td>Execution Units</td>
+                <td>~60-70%</td>
+                <td>Thousands of ALUs/FPUs doing math</td>
+            </tr>
+            <tr>
+                <td>Register Files</td>
+                <td>~15-20%</td>
+                <td>Per-thread state storage</td>
+            </tr>
+            <tr>
+                <td>Caches</td>
+                <td>~10-15%</td>
+                <td>Smaller caches, rely on parallelism to hide latency</td>
+            </tr>
+            <tr>
+                <td>Control Logic</td>
+                <td>~5-10%</td>
+                <td>Simple schedulers, minimal prediction</td>
+            </tr>
+        </table>
+
+        <p>
+            GPUs spend the <em>opposite</em> way: most transistors do math, and control logic is minimal. This is 
+            the fundamental tradeoff.
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace;">
+CPU Core (billions of transistors)          GPU Core (thousands of transistors)
+┌────────────────────────────┐              ┌──────────────────────┐
+│                            │              │  ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓  │
+│    HUGE CACHES (L1/L2)     │              │  ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓  │ ← ALUs
+│                            │              │  ▓▓ ▓▓ ▓▓ ▓▓ ▓▓ ▓▓  │
+│                            │              ├──────────────────────┤
+├────────────────────────────┤              │   Registers          │
+│  Branch Predict & Control  │              ├──────────────────────┤
+├────────────────────────────┤              │   Simple Scheduler   │
+│      ALU  FPU  SIMD        │              └──────────────────────┘
+└────────────────────────────┘              
+                                            (replicated 100s of times)
+            </pre>
+            <div class="figure-caption">Figure 2.1: Transistor allocation differences</div>
+        </div>
+
+        <h2>2.3 Memory Hierarchy Deep Dive</h2>
+
+        <p>
+            Memory is the bottleneck in modern computing. Both CPUs and GPUs fight this, but in different ways.
+        </p>
+
+        <h3>CPU Memory Strategy: Hide Latency with Caches</h3>
+
+        <p>
+            CPUs assume you'll access the same data repeatedly (temporal locality) and nearby data 
+            (spatial locality). They build massive cache hierarchies:
+        </p>
+
+        <ul>
+            <li><strong>L1 cache:</strong> 32-64 KB per core, 4 cycle latency, split into data and instruction</li>
+            <li><strong>L2 cache:</strong> 256 KB - 1 MB per core, ~12 cycle latency</li>
+            <li><strong>L3 cache:</strong> 8-64 MB shared, ~40 cycle latency</li>
+            <li><strong>Main Memory (DRAM):</strong> 16-128 GB, ~200 cycle latency</li>
+        </ul>
+
+        <p>
+            A modern CPU can have a 90%+ cache hit rate for typical programs, meaning most memory accesses 
+            are served from cache in a few cycles.
+        </p>
+
+        <h3>GPU Memory Strategy: Hide Latency with Threads</h3>
+
+        <p>
+            GPUs assume data won't fit in cache because you're processing massive datasets. Instead, they use 
+            <strong>latency hiding</strong> through massive parallelism:
+        </p>
+
+        <ul>
+            <li><strong>Registers:</strong> Thousands per thread, 1 cycle latency</li>
+            <li><strong>Shared Memory/L1:</strong> 64-128 KB per SM (Streaming Multiprocessor), ~20 cycle latency</li>
+            <li><strong>L2 cache:</strong> 40-80 MB shared across GPU, ~200 cycle latency</li>
+            <li><strong>Global Memory (HBM/GDDR):</strong> 16-80 GB, ~400 cycle latency</li>
+        </ul>
+
+        <p>
+            When a warp (group of threads) hits a memory access, the GPU doesn't wait. It switches to another 
+            ready warp. By the time it cycles through all warps, the memory is back. This is called 
+            <strong>latency hiding through parallelism</strong>.
+        </p>
+
+        <div class="key-takeaway">
+            <strong>Key Insight:</strong> CPUs hide latency with caches. GPUs hide latency with threads. 
+            This fundamental difference shapes everything.
+        </div>
+
+        <h2>2.4 Control Flow: Speculation vs Simplicity</h2>
+
+        <h3>CPU: The Oracle</h3>
+        <p>
+            CPUs run unpredictable code with lots of branches (if/else, loops, function calls). To go fast, 
+            they <em>predict the future</em>:
+        </p>
+
+        <ul>
+            <li><strong>Branch prediction:</strong> Guess which way a branch will go and speculatively execute</li>
+            <li><strong>Out-of-order execution:</strong> Reorder instructions to maximize throughput</li>
+            <li><strong>Speculative execution:</strong> Execute code before knowing if it's needed</li>
+            <li><strong>Register renaming:</strong> Eliminate false dependencies</li>
+        </ul>
+
+        <p>
+            A modern CPU core might have 200+ instructions in flight, with complex logic tracking dependencies 
+            and recovering from mis-predictions. This complexity costs transistors and power but makes 
+            sequential code fast.
+        </p>
+
+        <h3>GPU: The Conductor</h3>
+        <p>
+            GPUs assume you're running the same code (kernel) across many data points. They use simple control:
+        </p>
+
+        <ul>
+            <li><strong>SIMT execution:</strong> All threads in a warp run the same instruction</li>
+            <li><strong>No branch prediction:</strong> Branches cause divergence, which is handled explicitly</li>
+            <li><strong>In-order execution:</strong> Instructions execute in program order (mostly)</li>
+            <li><strong>Simple scheduler:</strong> Round-robin or scoreboard-based, no speculation</li>
+        </ul>
+
+        <p>
+            If different threads want to go different ways (divergence), the GPU handles it by executing both 
+            paths and masking off threads. This is inefficient but simple.
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace;">
+CPU Branch Prediction               GPU Branch Divergence
+─────────────────────              ──────────────────────
+if (x > 0)                         if (threadIdx.x % 2 == 0)
+    A();                               A();
+else                               else
+    B();                               B();
+
+CPU: Predicts likely path,         GPU: Half threads do A,
+     speculatively executes              other half do B,
+     ahead                               both paths execute
+            </pre>
+            <div class="figure-caption">Figure 2.2: Control flow handling</div>
+        </div>
+
+        <h2>2.5 Execution Pipelines</h2>
+
+        <h3>CPU: Deep and Complex</h3>
+        <p>
+            A typical CPU has a 12-20 stage pipeline:
+        </p>
+
+        <ol>
+            <li>Fetch 1, Fetch 2 (get instruction from cache)</li>
+            <li>Decode 1, Decode 2, Decode 3 (complex x86 decode)</li>
+            <li>Rename (register renaming)</li>
+            <li>Dispatch (send to execution units)</li>
+            <li>Execute 1, Execute 2, ... (depends on operation)</li>
+            <li>Write-back</li>
+            <li>Commit (make results visible)</li>
+        </ol>
+
+        <p>
+            Deep pipelines allow high clock speeds (5+ GHz) but require complex hazard handling.
+        </p>
+
+        <h3>GPU: Wide and Simple</h3>
+        <p>
+            A typical GPU core has a 6-10 stage pipeline:
+        </p>
+
+        <ol>
+            <li>Fetch (per-warp instruction fetch)</li>
+            <li>Decode (simple fixed-width instruction)</li>
+            <li>Issue (select ready warp)</li>
+            <li>Read (register file access)</li>
+            <li>Execute (ALU/FPU/LSU)</li>
+            <li>Write (register file write)</li>
+        </ol>
+
+        <p>
+            Simpler pipelines mean lower clock speeds (1.5-2 GHz) but massive replication is feasible.
+        </p>
+
+        <h2>2.6 Power and Thermal Considerations</h2>
+
+        <h3>CPU: High Frequency, High Power Density</h3>
+        <ul>
+            <li>Clock speeds: 3-5 GHz (base), up to 5.5 GHz (turbo)</li>
+            <li>Power: 65-250W for desktop/server CPUs</li>
+            <li>Power density: Very high (requires sophisticated cooling)</li>
+            <li>Voltage: Dynamic voltage and frequency scaling (DVFS)</li>
+        </ul>
+
+        <h3>GPU: Lower Frequency, Spread Across Area</h3>
+        <ul>
+            <li>Clock speeds: 1.5-2.5 GHz (more consistent)</li>
+            <li>Power: 150-600W for high-end GPUs</li>
+            <li>Power density: Lower per unit area (large die spreads heat)</li>
+            <li>Thermal throttling: Reduces clocks if too hot</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Engineering Reality:</strong> Power is the limiting factor for both architectures. Modern 
+            chips are "power-limited" not "transistor-limited" — you can't turn on all transistors at max 
+            frequency without melting the chip.
+        </div>
+
+        <h2>2.7 When to Use CPU vs GPU</h2>
+
+        <p>
+            Now that we understand the architectural differences, we can make informed decisions:
+        </p>
+
+        <h3>Use a CPU when:</h3>
+        <ul>
+            <li>You have sequential, unpredictable code with lots of branches</li>
+            <li>You need low latency for individual operations</li>
+            <li>Data fits in cache and exhibits locality</li>
+            <li>You need general-purpose computing flexibility</li>
+            <li>You're running diverse workloads that change frequently</li>
+        </ul>
+
+        <h3>Use a GPU when:</h3>
+        <ul>
+            <li>You have data-parallel work (same operation on many data points)</li>
+            <li>You need high throughput (total work done per second)</li>
+            <li>Data is too large to fit in cache</li>
+            <li>You can tolerate higher latency for individual operations</li>
+            <li>The workload is predictable and sustained</li>
+        </ul>
+
+        <h3>Examples:</h3>
+
+        <table class="comparison-table">
+            <tr>
+                <th>Task</th>
+                <th>Best Choice</th>
+                <th>Reason</th>
+            </tr>
+            <tr>
+                <td>Web server handling requests</td>
+                <td>CPU</td>
+                <td>Unpredictable, low-latency required</td>
+            </tr>
+            <tr>
+                <td>Training a neural network</td>
+                <td>GPU</td>
+                <td>Matrix multiply is highly parallel</td>
+            </tr>
+            <tr>
+                <td>Database query processing</td>
+                <td>CPU (mostly)</td>
+                <td>Irregular access patterns, branches</td>
+            </tr>
+            <tr>
+                <td>Video encoding</td>
+                <td>GPU</td>
+                <td>Pixel processing is parallel</td>
+            </tr>
+            <tr>
+                <td>Compiling code</td>
+                <td>CPU</td>
+                <td>Complex, sequential logic</td>
+            </tr>
+            <tr>
+                <td>Scientific simulation (weather)</td>
+                <td>GPU</td>
+                <td>Grid-based computation, parallel</td>
+            </tr>
+        </table>
+
+        <h2>2.8 Hybrid Approaches</h2>
+
+        <p>
+            Modern systems often use both! This is called <strong>heterogeneous computing</strong>:
+        </p>
+
+        <ul>
+            <li>CPU handles control flow, setup, and sequential parts</li>
+            <li>GPU handles data-parallel compute-intensive parts</li>
+            <li>Data transfers between CPU and GPU memory as needed</li>
+        </ul>
+
+        <p>
+            Frameworks like CUDA, OpenCL, and oneAPI make this programming model accessible.
+        </p>
+
+        <div class="exercise">
+            <strong>Exercise 2.1:</strong> Calculate: If a CPU has 4 cores and a GPU has 80 SMs with 64 CUDA 
+            cores each, how many execution units does each have? What does this tell you about parallelism?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 2.2:</strong> Research the die photo of an Intel or AMD CPU and an NVIDIA GPU. 
+            Identify the caches, execution units, and memory controllers. Estimate the area percentages.
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 2.3:</strong> Write a simple program (e.g., vector addition) that runs on both 
+            CPU and GPU. Measure performance for different data sizes. At what size does GPU win?
+        </div>
+
+        <h2>2.9 Chapter Summary</h2>
+
+        <p>
+            In this chapter, we explored:
+        </p>
+        <ul>
+            <li>Transistor budget allocation: CPUs spend on control/cache, GPUs on compute</li>
+            <li>Memory hierarchies: CPUs hide latency with caches, GPUs with threads</li>
+            <li>Control flow: CPUs predict and speculate, GPUs keep it simple</li>
+            <li>Execution pipelines: CPUs deep and complex, GPUs wide and simple</li>
+            <li>Power and thermal tradeoffs</li>
+            <li>When to use each architecture</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Next Steps:</strong> In Chapter 3, we'll dive into parallel execution models — SIMD vs SIMT, 
+            threads vs warps, and how kernels actually run on GPU hardware.
+        </div>
+
+        <h2>Further Reading</h2>
+        <ul>
+            <li>"Modern Processor Design" by Shen & Lipasti - excellent CPU architecture coverage</li>
+            <li>NVIDIA Ampere Architecture Whitepaper - detailed GPU architecture</li>
+            <li>"Computer Architecture: A Quantitative Approach" by Hennessy & Patterson - Chapter 4</li>
+            <li>Papers: "A Case for GPGPU Spatial Multitasking" (HPCA 2012)</li>
+        </ul>
+
+        <div class="chapter-nav">
+            <a href="chapter-01.html">← Chapter 1: Big Picture</a>
+            <a href="chapter-03.html">Next: Parallel Execution →</a>
+        </div>
+    </div>
+</body>
+</html>

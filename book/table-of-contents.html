@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create Your Own GPU From Scratch - Complete Book</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .toc-content { max-width: 1000px; margin: 0 auto; padding: 40px 20px; }
+      .part-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 14px; margin: 40px 0 20px; }
+      .chapter-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin: 16px 0; box-shadow: var(--shadow); }
+      .chapter-card h3 { margin-top: 0; }
+      .chapter-card a { color: var(--accent); text-decoration: none; font-weight: 600; }
+      .chapter-card a:hover { text-decoration: underline; }
+      .chapter-meta { color: var(--muted); font-size: 0.9rem; margin: 8px 0; }
+      .chapter-topics { background: #f9f9ff; padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 0.9rem; }
+      .status-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 0.8rem; margin-left: 8px; }
+      .status-complete { background: #4caf50; color: white; }
+      .status-planned { background: #ff9800; color: white; }
+    </style>
+  </head>
+  <body>
+    <div class="toc-content">
+      <header class="hero">
+        <h1>Create Your Own GPU From Scratch</h1>
+        <p>
+          A comprehensive, 750+ page book that takes you from GPU fundamentals to manufacturing silicon. 
+          Explained simply enough for students, detailed enough for GPU engineers and startup founders.
+        </p>
+        <div class="meta" style="margin-top: 20px;">
+          <span>Last updated: Jan 17, 2026</span> • 
+          <span>Total: 25 chapters</span> • 
+          <span>~750-800 pages</span> • 
+          <span>40-50 hours reading</span>
+        </div>
+        <div style="margin-top: 20px; padding: 16px; background: #e8f4fd; border-radius: 12px;">
+          <strong>📖 Complete Book Plan:</strong> 
+          <a href="BOOK_PLAN.md" style="color: var(--accent);">View detailed outline and structure</a>
+        </div>
+      </header>
+
+      <div class="part-header">
+        <h2 style="color: white; margin: 0;">PART I: GPU FUNDAMENTALS</h2>
+        <p style="margin: 8px 0 0;">Chapters 1-5 • Understanding the "why" and "what" of GPU architecture</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-01.html">Chapter 1: Big Picture - What is a GPU?</a>
+          <span class="status-badge status-complete">Full Chapter Available</span>
+        </h3>
+        <div class="chapter-meta">~20 pages • 45 min reading</div>
+        <p>
+          Introduction to parallel computing, CPU vs GPU philosophy, real-world applications (graphics, AI, scientific computing), 
+          history of GPU evolution, market landscape (NVIDIA, AMD, Intel), and why build your own GPU.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> Classroom analogy • Graphics vs GPGPU • AI/ML applications • Startup opportunities • 
+          Learning path • Prerequisites
+        </div>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-02.html">Chapter 2: GPU vs CPU - Architecture Deep Dive</a>
+          <span class="status-badge status-complete">Full Chapter Available</span>
+        </h3>
+        <div class="chapter-meta">~25 pages • 55 min reading</div>
+        <p>
+          Fundamental architectural differences between CPUs and GPUs at the silicon level. Transistor budget allocation, 
+          memory hierarchies, control flow strategies, execution pipelines, and power/thermal considerations.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> Transistor budgets • Cache vs parallelism • Branch prediction vs divergence • 
+          Pipeline depth • When to use each
+        </div>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-03.html">Chapter 3: Parallel Execution Models</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          SIMD vs SIMT execution, threads/warps/blocks/grids organization, thread divergence and convergence, 
+          programming model abstractions (CUDA/OpenCL/HIP), kernel launch mechanics, and synchronization primitives.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> SIMD architecture • SIMT model • Warps and wavefronts • Grid organization • 
+          Thread synchronization • Practical examples
+        </div>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-04.html">Chapter 4: Core GPU Components</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~28 pages • 55 min reading</div>
+        <p>
+          Deep dive into ALU design, register file organization, program counter management, scheduler architectures, 
+          load/store units, execution pipelines, datapath design, and control signals.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> ALU microarchitecture • Register files • PC and branch logic • 
+          Scheduler FSMs • LSU design • Control signals
+        </div>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-05.html">Chapter 5: Instruction Set Architecture (ISA)</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~25 pages • 50 min reading</div>
+        <p>
+          ISA design principles, instruction encoding formats, register allocation strategies, arithmetic/memory/control 
+          instructions, special registers (%threadIdx, %blockIdx), latency vs throughput, and ISA evolution.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> ISA principles • Instruction formats • Opcode encoding • Special registers • 
+          Complete ISA specification
+        </div>
+      </div>
+
+      <div class="part-header" style="margin-top: 60px;">
+        <h2 style="color: white; margin: 0;">PART II: EXECUTION & SCHEDULING</h2>
+        <p style="margin: 8px 0 0;">Chapters 6-11 • How GPUs actually run code</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-06.html">Chapter 6: Pipeline Design and Control Flow</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          Fetch-Decode-Execute cycle, multi-stage pipeline design, hazard detection and forwarding, stall conditions, 
+          state machine design, branch handling, timing diagrams, and performance analysis.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-07.html">Chapter 7: Memory Hierarchy</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~35 pages • 70 min reading</div>
+        <p>
+          Memory pyramid (registers → cache → DRAM), cache design (L1/L2/L3), cache coherence protocols, 
+          shared memory/scratchpad, global memory organization, bank conflicts, and bandwidth optimization.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-08.html">Chapter 8: Memory Coalescing</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~22 pages • 45 min reading</div>
+        <p>
+          Access pattern detection, coalescing logic design, transaction merging, performance impact, 
+          software optimization techniques, hardware implementation, and case studies.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-09.html">Chapter 9: Thread Scheduling</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~28 pages • 55 min reading</div>
+        <p>
+          Warp/wavefront scheduling, round-robin schedulers, scoreboarding, dependency tracking, latency hiding strategies, 
+          occupancy optimization, scheduler FSM design, and performance modeling.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-10.html">Chapter 10: Advanced Execution Units</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          Tensor cores/matrix engines, ray tracing acceleration, texture sampling units, special function units (SFU), 
+          fixed-function pipelines, custom accelerators, and dataflow architectures.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-11.html">Chapter 11: Graphics vs Compute Pipelines</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~25 pages • 50 min reading</div>
+        <p>
+          Rasterization pipeline, vertex shaders, fragment shaders, compute shaders, unified shader architecture, 
+          graphics-specific features, compute-focused design, and hybrid approaches.
+        </p>
+      </div>
+
+      <div class="part-header" style="margin-top: 60px;">
+        <h2 style="color: white; margin: 0;">PART III: SOFTWARE & TOOLING</h2>
+        <p style="margin: 8px 0 0;">Chapters 12-14 • The software stack that makes hardware useful</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-12.html">Chapter 12: Software Stack & Programming Model</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~32 pages • 65 min reading</div>
+        <p>
+          Driver architecture, runtime system design, kernel launch APIs, memory management, CUDA/OpenCL/Vulkan comparison, 
+          DSL design for custom GPUs, host-device communication, and debugging/profiling tools.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-13.html">Chapter 13: Compiler & Code Generation</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~35 pages • 70 min reading</div>
+        <p>
+          Compiler frontend (parsing, AST), intermediate representations (LLVM IR, SPIR-V), optimization passes, 
+          register allocation, instruction scheduling, code generation, kernel compilation flow, and JIT compilation.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-14.html">Chapter 14: Testing & Verification</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          Unit testing strategies, integration testing, kernel testbenches, simulation frameworks (cocotb, VCS), 
+          waveform analysis, coverage metrics, formal verification basics, and continuous integration.
+        </p>
+      </div>
+
+      <div class="part-header" style="margin-top: 60px;">
+        <h2 style="color: white; margin: 0;">PART IV: HARDWARE IMPLEMENTATION</h2>
+        <p style="margin: 8px 0 0;">Chapters 15-21 • Writing actual RTL and building your GPU</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-15.html">Chapter 15: Microarchitecture Specification</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~28 pages • 55 min reading</div>
+        <p>
+          Requirements gathering, performance targets, power budgets, area constraints, block diagrams, 
+          interface specifications, timing budgets, and microarchitecture document template.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-16.html">Chapter 16: RTL Design Fundamentals</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~35 pages • 70 min reading</div>
+        <p>
+          Verilog vs SystemVerilog, module hierarchy, coding style guide, synchronous design principles, 
+          reset strategies, clock domain crossing, parameterization, generate blocks, and common pitfalls.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-17.html">Chapter 17: Building Your First GPU Core</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~40 pages • 80 min reading</div>
+        <p>
+          Top-level architecture, ALU implementation, register file design, decoder implementation, PC and branch logic, 
+          LSU with async memory, scheduler FSM, integration and wiring, and full RTL walkthrough.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-18.html">Chapter 18: Multi-Core GPU Design</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          Replication strategies, dispatcher design, memory controller arbitration, interconnect fabrics, 
+          scalability considerations, resource sharing, and load balancing.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-19.html">Chapter 19: RTL Design (Verilog/SystemVerilog)</a>
+          <span class="status-badge status-complete">Full Chapter Available</span>
+        </h3>
+        <div class="chapter-meta">~35 pages • 75 min reading</div>
+        <p>
+          Complete RTL implementation guide with real code examples: ALU, register files, LSU, decoder, and best practices. 
+          Includes coding style, common mistakes, and full working examples from tiny-gpu.
+        </p>
+        <div class="chapter-topics">
+          <strong>Topics:</strong> Verilog vs SystemVerilog • Module structure • ALU design • Register files • 
+          LSU async memory • Decoder • Common RTL mistakes
+        </div>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-20.html">Chapter 20: Simulation & Debug</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~28 pages • 55 min reading</div>
+        <p>
+          Testbench architecture, stimulus generation, memory models, assertion-based verification, waveform debugging, 
+          performance analysis, and regression testing.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-21.html">Chapter 21: Synthesis & Timing</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          Synthesis tool flow (Synopsys, Cadence, Yosys), timing constraints (SDC), clock definitions, 
+          I/O delays, false paths, multi-cycle paths, and fixing timing violations.
+        </p>
+      </div>
+
+      <div class="part-header" style="margin-top: 60px;">
+        <h2 style="color: white; margin: 0;">PART V: PHYSICAL DESIGN & MANUFACTURING</h2>
+        <p style="margin: 8px 0 0;">Chapters 22-25 • From RTL to silicon</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-22.html">Chapter 22: Physical Design Flow</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~35 pages • 70 min reading</div>
+        <p>
+          Floorplanning, power planning, placement strategies, clock tree synthesis, routing (global and detailed), 
+          timing closure techniques, IR drop analysis, EM analysis, and tool flows (Innovus, ICC2, OpenLane).
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-23.html">Chapter 23: Signoff & Validation</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~30 pages • 60 min reading</div>
+        <p>
+          DRC (Design Rule Check), LVS (Layout vs Schematic), STA (Static Timing Analysis), power analysis, 
+          signal integrity, crosstalk analysis, antenna checks, and formal equivalence checking.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-24.html">Chapter 24: Tape-out Process</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~28 pages • 55 min reading</div>
+        <p>
+          Foundry selection, PDK (Process Design Kit), GDS generation, mask preparation, reticle layout, 
+          OPC (Optical Proximity Correction), packaging options, pinout planning, and cost estimation.
+        </p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>
+          <a href="chapters/chapter-25.html">Chapter 25: Manufacturing & Bring-up</a>
+          <span class="status-badge status-planned">Planned</span>
+        </h3>
+        <div class="chapter-meta">~32 pages • 65 min reading</div>
+        <p>
+          Wafer fabrication overview, die testing, packaging and assembly, board design, first silicon bring-up, 
+          debug strategies, validation testing, performance characterization, yield analysis, and production ramp.
+        </p>
+      </div>
+
+      <div class="part-header" style="margin-top: 60px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+        <h2 style="color: white; margin: 0;">APPENDICES</h2>
+        <p style="margin: 8px 0 0;">Reference materials and supplementary content</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>Appendix A: ISA Reference</h3>
+        <p>Complete instruction set specification, encoding tables, and pseudocode</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>Appendix B: RTL Code Listings</h3>
+        <p>Full Verilog/SystemVerilog source code and testbench examples</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>Appendix C: Tool Setup Guides</h3>
+        <p>Installing Icarus Verilog, Verilator, Yosys, cocotb setup, OpenLane flow, and open-source PDKs</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>Appendix D: Glossary</h3>
+        <p>GPU terminology, hardware design terms, and acronyms</p>
+      </div>
+
+      <div class="chapter-card">
+        <h3>Appendix E: Further Reading</h3>
+        <p>Academic papers, industry white papers, open-source projects, and online courses</p>
+      </div>
+
+      <div style="margin: 60px 0 40px; padding: 24px; background: var(--panel); border-radius: 12px; border: 2px solid var(--accent);">
+        <h2>How to Use This Book</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+          <div>
+            <h3 style="color: var(--accent);">For Students</h3>
+            <p>Read sequentially. Do all exercises. Build the example GPU as a capstone project.</p>
+          </div>
+          <div>
+            <h3 style="color: var(--accent);">For Startup Founders</h3>
+            <p>Focus on Parts I-II for architecture. Deep-dive Parts IV-V when building silicon.</p>
+          </div>
+          <div>
+            <h3 style="color: var(--accent);">For Hobbyists</h3>
+            <p>Read at your own pace. Focus on simulation and RTL. Skip heavy theory if desired.</p>
+          </div>
+        </div>
+      </div>
+
+      <footer style="text-align: center; margin: 60px 0 40px; color: var(--muted);">
+        <p>
+          <a href="https://github.com/adam-maj/tiny-gpu" style="color: var(--accent);">View tiny-gpu reference implementation on GitHub</a>
+        </p>
+        <p>Created with ❤️ for GPU engineers, students, and hardware entrepreneurs</p>
+      </footer>
+    </div>
+  </body>
+</html>

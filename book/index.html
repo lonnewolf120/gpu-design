@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create Your Own GPU From Scratch</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-title">Create Your Own GPU</div>
+          <div class="brand-subtitle">From scratch → modern GPUs</div>
+        </div>
+        <div class="search">
+          <input id="searchInput" type="search" placeholder="Search chapters..." />
+        </div>
+        <nav id="toc" class="toc"></nav>
+        <div class="sidebar-footer">
+          <div class="pill">GitBook-style</div>
+          <div class="pill">Static HTML</div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="hero">
+          <h1>Create Your Own GPU From Scratch</h1>
+          <p>
+            A comprehensive, 750+ page book that takes you from GPU fundamentals to manufacturing silicon. 
+            Explained simply enough for students, detailed enough for GPU engineers and startup founders.
+          </p>
+          <div class="meta">
+            <span>Last updated: Jan 17, 2026</span>
+            <span>Total: 25 chapters • ~750-800 pages • 40-50 hours reading</span>
+          </div>
+          <div style="margin-top: 20px; padding: 16px; background: #e8f4fd; border-radius: 12px;">
+            <strong>📖 Book Structure:</strong> 
+            <a href="BOOK_PLAN.md" style="color: var(--accent);">View Complete Book Plan & Outline</a>
+          </div>
+        </header>
+
+        <section id="chapter-1" data-title="1. Big Picture: What is a GPU?" class="chapter">
+          <h2>1. Big Picture: What is a GPU?</h2>
+          <p>
+            Imagine a classroom of 1,000 students. If each student can solve one tiny math problem at the same time,
+            the class finishes a huge worksheet very fast. A GPU is like that classroom. It has many small workers
+            that all do the same kind of work on different pieces of data.
+          </p>
+          <p>
+            A CPU is like a single super-smart student who can solve difficult problems quickly, one after another.
+            A GPU is many students doing simpler steps in parallel. This is why GPUs are great for graphics, AI,
+            and other tasks that can be split into many similar pieces.
+          </p>
+          <p>
+            If you are a student or building a startup, read this in two passes: first pass for intuition,
+            second pass for the engineering notes. We’ll keep the words simple but the details real.
+          </p>
+          <div class="callout">
+            <strong>Big idea:</strong> GPUs are built for lots of simple work in parallel, not one complex task.
+          </div>
+        </section>
+
+        <section id="chapter-2" data-title="2. GPU vs CPU (Kid Version + Engineer Notes)" class="chapter">
+          <h2>2. GPU vs CPU (Kid Version + Engineer Notes)</h2>
+          <p>
+            <strong>Kid version:</strong> A CPU is a chef who can cook any dish but only a few at a time. A GPU is a
+            giant kitchen with hundreds of cooks making the same sandwich for a whole stadium.
+          </p>
+          <ul>
+            <li><strong>CPU:</strong> few cores, very smart control logic, huge caches for fast decision making.</li>
+            <li><strong>GPU:</strong> many cores, simpler control logic, lots of lanes doing the same instruction.</li>
+            <li><strong>Result:</strong> GPUs excel when the same operation repeats over large data (vectors, pixels, matrices).</li>
+          </ul>
+          <p>
+            <strong>Engineer notes:</strong> GPUs spend transistor budget on replication and bandwidth. CPUs spend it on
+            speculation, deep pipelines, and control flow. This shapes ISA, cache hierarchy, and scheduling strategies.
+          </p>
+        </section>
+
+        <section id="chapter-3" data-title="3. How GPU Programs Run (Threads, Blocks, Grids)" class="chapter">
+          <h2>3. How GPU Programs Run (Threads, Blocks, Grids)</h2>
+          <p>
+            GPUs run <strong>kernels</strong> — small programs that do the same work on many data points.
+            Think of a kernel as a recipe and each thread as a student following that recipe on a different ingredient.
+          </p>
+          <ul>
+            <li><strong>Thread:</strong> the smallest worker; has its own registers and a thread ID.</li>
+            <li><strong>Block:</strong> a group of threads that can share fast memory and synchronize.</li>
+            <li><strong>Grid:</strong> all blocks launched for a kernel.</li>
+          </ul>
+          <p>
+            <strong>SIMD:</strong> one instruction controls many data lanes.
+            <strong>SIMT:</strong> many threads run the same instruction stream, but each thread keeps its own data and state.
+          </p>
+        </section>
+
+        <section id="chapter-4" data-title="4. Core Pieces Inside a GPU" class="chapter">
+          <h2>4. Core Pieces Inside a GPU</h2>
+          <p>
+            A GPU core is like a tiny factory. Each part has a job:
+          </p>
+          <ul>
+            <li><strong>ALU (Arithmetic Logic Unit):</strong> does math like add/multiply.</li>
+            <li><strong>Registers:</strong> tiny fast storage boxes for each thread.</li>
+            <li><strong>Program Counter (PC):</strong> a bookmark showing which instruction is next.</li>
+            <li><strong>Scheduler:</strong> the traffic cop that decides which work happens each cycle.</li>
+            <li><strong>Load/Store Unit:</strong> the delivery truck that brings data from memory.</li>
+          </ul>
+          <p>
+            In a beginner GPU, one scheduler controls many threads at once (lockstep). This is simpler and good
+            for learning, though it limits how threads can branch differently.
+          </p>
+        </section>
+
+        <section id="chapter-5" data-title="5. The GPU Alphabet: ISA" class="chapter">
+          <h2>5. The GPU Alphabet: ISA (Instruction Set Architecture)</h2>
+          <p>
+            The ISA is the GPU’s alphabet — the list of words (instructions) it understands.
+            For a starter GPU, you only need a small set:
+          </p>
+          <div class="code-block">
+            <pre><code>Math: ADD, SUB, MUL, DIV
+Memory: LDR, STR
+Control: CMP, BRnzp, RET
+Setup: CONST</code></pre>
+          </div>
+          <p>
+            <strong>Why special registers?</strong> Each thread needs to know who it is. Special registers like
+            <code>%threadIdx</code>, <code>%blockIdx</code>, and <code>%blockDim</code> tell the thread which piece of data it owns.
+          </p>
+          <p>
+            <strong>Engineer detail:</strong> A small ISA keeps decode logic small and fast. You can always add
+            more instructions later for performance or convenience.
+          </p>
+        </section>
+
+        <section id="chapter-6" data-title="6. The GPU Step-by-Step Clock" class="chapter">
+          <h2>6. The GPU Step-by-Step Clock</h2>
+          <p>
+            Every clock tick, the GPU moves through stages. A simple design uses a finite-state machine (FSM):
+          </p>
+          <ul>
+            <li><strong>FETCH:</strong> get the next instruction from program memory.</li>
+            <li><strong>DECODE:</strong> decide what that instruction means.</li>
+            <li><strong>REQUEST:</strong> if it needs memory, start the request.</li>
+            <li><strong>WAIT:</strong> pause until memory returns the data.</li>
+            <li><strong>EXECUTE:</strong> do the math or comparison.</li>
+            <li><strong>UPDATE:</strong> write results to registers and update the PC.</li>
+          </ul>
+          <p>
+            <strong>Branch divergence:</strong> If some threads jump and others don’t, they can’t stay in lockstep.
+            Advanced GPUs handle this with reconvergence stacks or per-thread PCs. A first GPU can assume
+            no divergence to keep things simple.
+          </p>
+        </section>
+
+        <section id="chapter-7" data-title="7. Memory: Where Data Lives" class="chapter">
+          <h2>7. Memory: Where Data Lives</h2>
+          <p>
+            Memory is like a huge library. Fast memory is close but small. Large memory is far but slow.
+          </p>
+          <ul>
+            <li><strong>Registers:</strong> tiny and fastest, right next to each thread.</li>
+            <li><strong>Shared memory:</strong> fast memory shared by threads in a block.</li>
+            <li><strong>Cache:</strong> keeps recently used data close to the core.</li>
+            <li><strong>Global memory:</strong> big and slow, outside the chip.</li>
+          </ul>
+          <p>
+            A first GPU can start with only global memory and a simple controller. Then add cache and shared memory.
+          </p>
+        </section>
+
+        <section id="chapter-8" data-title="8. Memory Coalescing (Packing Trips)" class="chapter">
+          <h2>8. Memory Coalescing (Packing Trips)</h2>
+          <p>
+            Imagine 32 kids all asking the librarian for books. If they request books on the same shelf,
+            the librarian can bring one big stack instead of 32 separate trips. That’s coalescing.
+          </p>
+          <p>
+            Engineer view: detect nearby addresses from a warp and merge them into fewer transactions.
+            This improves effective bandwidth and reduces latency pressure.
+          </p>
+          <div class="callout">
+            <strong>Rule of thumb:</strong> consecutive addresses per warp = fast; scattered addresses = slow.
+          </div>
+        </section>
+
+        <section id="chapter-9" data-title="9. Scheduling (Keeping Workers Busy)" class="chapter">
+          <h2>9. Scheduling (Keeping Workers Busy)</h2>
+          <p>
+            If a worker is waiting for memory, you don’t want the whole factory to stop. The scheduler
+            swaps in another ready warp so the ALUs keep working.
+          </p>
+          <ul>
+            <li><strong>Simple scheduler:</strong> round-robin across warps.</li>
+            <li><strong>Advanced scheduler:</strong> scoreboards to track dependencies and pick the next ready warp.</li>
+          </ul>
+        </section>
+
+        <section id="chapter-10" data-title="10. Special Units (Modern GPUs)" class="chapter">
+          <h2>10. Special Units (Modern GPUs)</h2>
+          <p>
+            Today’s GPUs add extra “super tools”:
+          </p>
+          <ul>
+            <li><strong>Tensor cores:</strong> very fast matrix multiply (AI/ML).</li>
+            <li><strong>Ray tracing cores:</strong> speed up lighting calculations.</li>
+            <li><strong>Texture units:</strong> fast image sampling for graphics.</li>
+          </ul>
+          <p>
+            When you build your own GPU, you can start with simple ALUs and later add a tiny matrix unit.
+          </p>
+        </section>
+
+        <section id="chapter-11" data-title="11. Graphics vs Compute" class="chapter">
+          <h2>11. Graphics vs Compute</h2>
+          <p>
+            <strong>Graphics GPU:</strong> includes fixed steps like turning triangles into pixels.
+            <strong>Compute GPU:</strong> focuses on general math tasks. Most modern GPUs combine both.
+          </p>
+          <p>
+            If your startup targets compute, you can skip early graphics stages and focus on kernels, memory,
+            and scheduling first.
+          </p>
+        </section>
+
+        <section id="chapter-12" data-title="12. The Software Stack (Your GPU’s Brain)" class="chapter">
+          <h2>12. The Software Stack (Your GPU’s Brain)</h2>
+          <p>
+            Hardware alone is not enough. You need software to feed it instructions:
+          </p>
+          <ul>
+            <li><strong>Programming model:</strong> how users describe kernels (CUDA/OpenCL/DSL).</li>
+            <li><strong>Compiler:</strong> turns code into GPU instructions (ISA).</li>
+            <li><strong>Runtime/driver:</strong> loads code, launches kernels, and moves data.</li>
+          </ul>
+          <p>
+            For a first GPU, you can build a tiny assembler and run kernels by loading memory directly
+            from a testbench.
+          </p>
+        </section>
+
+        <section id="chapter-13" data-title="13. Testing Your GPU" class="chapter">
+          <h2>13. Testing Your GPU</h2>
+          <p>
+            Testing is like checking your LEGO model step by step:
+          </p>
+          <ul>
+            <li><strong>Unit tests:</strong> does the ALU add correctly? Does LDR read memory?</li>
+            <li><strong>Kernel tests:</strong> run vector add and matrix multiply and verify output memory.</li>
+            <li><strong>Trace logs:</strong> capture each cycle to see where things went wrong.</li>
+          </ul>
+          <p>
+            Simulation frameworks like cocotb make it easy to drive the GPU and model external memory.
+          </p>
+        </section>
+
+        <section id="chapter-14" data-title="14. Performance Basics" class="chapter">
+          <h2>14. Performance Basics</h2>
+          <p>
+            Three key numbers explain GPU speed:
+          </p>
+          <ul>
+            <li><strong>Occupancy:</strong> how many warps can be active at once.</li>
+            <li><strong>Throughput:</strong> how many operations per cycle.</li>
+            <li><strong>Bandwidth:</strong> how fast memory can deliver data.</li>
+          </ul>
+          <p>
+            If your GPU is slow, ask: are the ALUs idle? Are we waiting on memory? Are there too few threads?
+          </p>
+        </section>
+
+        <section id="chapter-15" data-title="15. Modern GPU Development Reality" class="chapter">
+          <h2>15. Modern GPU Development Reality</h2>
+          <p>
+            Production GPUs are enormous projects. They include:
+          </p>
+          <ul>
+            <li>Huge caches and memory controllers.</li>
+            <li>Power management and clock gating.</li>
+            <li>Multiple execution engines and graphics pipelines.</li>
+            <li>Large compiler and driver teams.</li>
+          </ul>
+          <p>
+            You grow from a minimal GPU by adding features step-by-step: caching, coalescing, warp scheduling,
+            branch divergence handling, and shared memory.
+          </p>
+        </section>
+
+        <section id="chapter-16" data-title="16. Step-by-Step Build Plan" class="chapter">
+          <h2>16. Step-by-Step Build Plan</h2>
+          <ol>
+            <li><strong>Define your ISA:</strong> list all instructions and registers.</li>
+            <li><strong>Build a tiny core:</strong> fetch, decode, execute in a clean FSM.</li>
+            <li><strong>Add per-thread state:</strong> registers, PC, and thread IDs.</li>
+            <li><strong>Connect memory:</strong> implement load/store and a controller.</li>
+            <li><strong>Write kernels:</strong> vector add, matrix multiply, reduction.</li>
+            <li><strong>Scale up:</strong> more cores, more threads, basic scheduling.</li>
+            <li><strong>Optimize:</strong> cache, coalescing, shared memory, warp scheduling.</li>
+          </ol>
+        </section>
+
+        <section id="chapter-17" data-title="17. Deep Dive Resources" class="chapter">
+          <h2>17. Deep Dive Resources</h2>
+          <ul>
+            <li><strong>Open-source GPUs:</strong> MIAOW, VeriGPU, tiny-gpu-like projects.</li>
+            <li><strong>Books:</strong> Hennessy &amp; Patterson, GPU Gems, Programming Massively Parallel Processors.</li>
+            <li><strong>Specs:</strong> CUDA Programming Guide, OpenCL spec, Vulkan compute.</li>
+            <li><strong>Tools:</strong> cocotb, Icarus Verilog, sv2v, open-source PDKs.</li>
+          </ul>
+        </section>
+
+        <section id="chapter-18" data-title="18. From Idea to Microarchitecture" class="chapter">
+          <h2>18. From Idea to Microarchitecture</h2>
+          <p>
+            This is where you turn the “what” into the “how.” You decide how many cores, how many threads per core,
+            what the pipeline stages are, and how memory requests flow.
+          </p>
+          <ul>
+            <li><strong>Inputs:</strong> target workloads, power budget, area budget, and performance goals.</li>
+            <li><strong>Outputs:</strong> block diagram, interfaces, pipeline stages, and timing assumptions.</li>
+            <li><strong>Artifacts:</strong> microarchitecture spec (MAS) and timing diagrams.</li>
+          </ul>
+          <p>
+            Think of microarchitecture as the “blueprint” before you start coding.
+          </p>
+        </section>
+
+        <section id="chapter-19" data-title="19. RTL Design (Verilog/SystemVerilog)" class="chapter">
+          <h2>19. RTL Design (Verilog/SystemVerilog)</h2>
+          <p>
+            RTL is the hardware “source code.” You describe registers, combinational logic, and state machines.
+            A minimal GPU uses modules like <strong>core</strong>, <strong>scheduler</strong>, <strong>decoder</strong>, and <strong>controller</strong>.
+          </p>
+          <ul>
+            <li><strong>Style:</strong> synchronous <code>always @(posedge clk)</code>, clear reset behavior.</li>
+            <li><strong>Modules:</strong> one file per block, clean I/O definitions.</li>
+            <li><strong>Simulation:</strong> build a testbench to run kernels and check memory.</li>
+          </ul>
+          <p>
+            Write small modules first (ALU, LSU), then wire them into the core, then the GPU top-level.
+          </p>
+        </section>
+
+        <section id="chapter-20" data-title="20. Verification (Sim, Testbenches, Coverage)" class="chapter">
+          <h2>20. Verification (Sim, Testbenches, Coverage)</h2>
+          <p>
+            Verification answers one question: “Did we build what we meant to build?”
+          </p>
+          <ul>
+            <li><strong>Unit tests:</strong> verify ALU ops, branch logic, and register writes.</li>
+            <li><strong>System tests:</strong> run full kernels and compare output memory.</li>
+            <li><strong>Coverage:</strong> check that all instructions and states have been exercised.</li>
+          </ul>
+          <p>
+            Even a simple GPU benefits from automated tests that run on every change.
+          </p>
+        </section>
+
+        <section id="chapter-21" data-title="21. Synthesis (RTL → Gates)" class="chapter">
+          <h2>21. Synthesis (RTL → Gates)</h2>
+          <p>
+            Synthesis turns Verilog into a gate-level netlist. It maps your design to real standard cells.
+          </p>
+          <ul>
+            <li><strong>Inputs:</strong> RTL + timing constraints (clock speed, I/O timing).</li>
+            <li><strong>Outputs:</strong> gate netlist, area/power/timing reports.</li>
+            <li><strong>Goal:</strong> meet timing without blowing area or power budgets.</li>
+          </ul>
+        </section>
+
+        <section id="chapter-22" data-title="22. Physical Design (Floorplan → GDS)" class="chapter">
+          <h2>22. Physical Design (Floorplan → GDS)</h2>
+          <p>
+            Physical design is where logic becomes geometry. You place cells, route wires, and close timing.
+          </p>
+          <ul>
+            <li><strong>Floorplan:</strong> chip size, block placement, power grid.</li>
+            <li><strong>Place &amp; Route:</strong> place cells, then connect them with metal wires.</li>
+            <li><strong>Timing closure:</strong> fix paths that are too slow.</li>
+          </ul>
+          <p>
+            The final output is a <strong>GDS</strong> file — the blueprint manufacturers use to make the chip.
+          </p>
+        </section>
+
+        <section id="chapter-23" data-title="23. Signoff (DRC/LVS/STA)" class="chapter">
+          <h2>23. Signoff (DRC/LVS/STA)</h2>
+          <p>
+            Signoff is the final safety check before manufacturing:
+          </p>
+          <ul>
+            <li><strong>DRC:</strong> design rules check (geometry rules from the foundry).</li>
+            <li><strong>LVS:</strong> layout vs schematic (does layout match the netlist?).</li>
+            <li><strong>STA:</strong> static timing analysis (does it meet clock timing?).</li>
+          </ul>
+        </section>
+
+        <section id="chapter-24" data-title="24. Tape-out and Manufacturing Handoff" class="chapter">
+          <h2>24. Tape-out and Manufacturing Handoff</h2>
+          <p>
+            Tape-out is the moment you send your design to the chip manufacturer (the foundry).
+            The foundry needs specific files and reports to build the masks.
+          </p>
+          <ul>
+            <li><strong>Deliverables:</strong> GDS, netlist, timing reports, power intent, DRC/LVS signoff.</li>
+            <li><strong>Packaging:</strong> decide the package type and pinout.</li>
+            <li><strong>Bring-up plan:</strong> how you will test the first silicon.</li>
+          </ul>
+          <p>
+            After tape-out, silicon comes back in weeks or months. Then comes lab testing, board bring-up,
+            and driver validation.
+          </p>
+        </section>
+
+        <section id="chapter-25" data-title="25. Manufacturing Checklist for Startups" class="chapter">
+          <h2>25. Manufacturing Checklist for Startups</h2>
+          <ul>
+            <li><strong>Spec freeze:</strong> lock the ISA and microarchitecture before layout.</li>
+            <li><strong>Verification status:</strong> tests passing + coverage targets met.</li>
+            <li><strong>PD signoff:</strong> DRC/LVS/STA clean.</li>
+            <li><strong>Risk plan:</strong> have a backup if a test fails (B0/B1 spins).</li>
+            <li><strong>Bring-up:</strong> test plans, evaluation boards, and driver roadmap.</li>
+          </ul>
+          <p>
+            These steps reduce costly respins and help you ship faster.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

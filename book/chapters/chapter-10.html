@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 10: Advanced Execution Units | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-09.html">← Previous: Thread Scheduling</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-11.html">Next: Graphics vs Compute →</a>
+        </div>
+
+        <h1>Chapter 10: Advanced Execution Units and Specialization</h1>
+        
+        <div style="color: #999; margin: 20px 0;">
+            <span>Part II: Execution & Scheduling</span> • 
+            <span>Reading time: ~70 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+
+        <p>
+            Modern GPUs don't just have simple ALUs. They include <strong>specialized hardware</strong> for specific operations:
+        </p>
+
+        <ul>
+            <li><strong>Tensor Cores:</strong> Matrix multiply-accumulate (4×4×16 operations/cycle)</li>
+            <li><strong>Ray Tracing Units:</strong> Triangle intersection, BVH traversal</li>
+            <li><strong>Special Function Units (SFU):</strong> Transcendental functions (sin, exp, sqrt)</li>
+            <li><strong>Crypto Accelerators:</strong> AES, SHA (in modern GPUs)</li>
+        </ul>
+
+        <p>
+            Specialization is the future of GPU architecture. This chapter explores how and why.
+        </p>
+
+        <h2>10.1 Tensor Cores: The Rise of Matrix Hardware</h2>
+
+        <h3>The Problem: Matrix Multiplication is Slow</h3>
+
+        <p>
+            Traditional ALU approach for 4×4×8 matrix multiply:
+        </p>
+
+        <div class="code-block">
+<pre>// Naive approach: 4×4×8 = 128 multiplications
+for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+        for (int k = 0; k < 8; k++) {
+            C[i][j] += A[i][k] * B[k][j];
+        }
+    }
+}
+// Time: 128 cycles (one multiply per cycle)
+// This dominates deep learning workloads!
+        </pre>
+        </div>
+
+        <h3>The Solution: Tensor Cores</h3>
+
+        <p>
+            Instead of 128 cycles, a Tensor Core does it in <strong>1 cycle</strong>:
+        </p>
+
+        <div class="mermaid">
+            graph TB
+            A["Tensor Core Input:<br/>4x4 FP16 matrix A<br/>4x8 FP16 matrix B"] --> B["Multiply-Accumulate<br/>All 128 operations<br/>in parallel"]
+            B --> C["Output: 4x4 FP32<br/>matrix C"]
+            C --> D["Result: 128× speedup<br/>vs scalar ALU"]
+            
+            style A fill:#e3f2fd
+            style D fill:#c8e6c9
+        </div>
+
+        <h3>Tensor Core Performance Across Generations</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>GPU</th>
+                    <th>Year</th>
+                    <th>FP32 (ALU)</th>
+                    <th>Tensor (Mixed)</th>
+                    <th>Tensor/ALU</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>V100</td>
+                    <td>2017</td>
+                    <td>125 TFLOPS</td>
+                    <td>1000 TFLOPS</td>
+                    <td>8×</td>
+                </tr>
+                <tr>
+                    <td>A100</td>
+                    <td>2020</td>
+                    <td>312 TFLOPS</td>
+                    <td>5120 TFLOPS (TF32)</td>
+                    <td>16×</td>
+                </tr>
+                <tr>
+                    <td>H100</td>
+                    <td>2022</td>
+                    <td>756 TFLOPS</td>
+                    <td>1456 TFLOPS (FP8)</td>
+                    <td>2× (but FP8!)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>10.2 Special Function Units (SFU)</h2>
+
+        <p>
+            GPUs include hardwired units for transcendental functions:
+        </p>
+
+        <div class="code-block">
+<pre>// SFU operations (latency on NVIDIA GPU):
+float x = sin(theta);      // 4 cycles (hardwired SFU)
+float y = exp(z);          // 4 cycles (hardwired SFU)
+float w = sqrt(r);         // 4 cycles (hardwired SFU)
+
+// Without SFU (software):
+// sin(): ~20 cycles (polynomial approximation)
+// With SFU: ~5× speedup!
+        </pre>
+        </div>
+
+        <h3>Why Hardwire SFU?</h3>
+
+        <p>
+            <strong>Grade 5 Analogy:</strong> Imagine you're doing long division by hand. It's tedious! A calculator (SFU) does it instantly. That's why GPUs include SFU—transcendental functions are <em>so common</em> in graphics that they need to be fast.
+        </p>
+
+        <p>
+            <strong>Engineer Note:</strong> SFU uses <strong>piecewise polynomial approximation</strong> with precomputed lookup tables and <strong>Newton-Raphson iterations</strong>. Cost: ~50 transistors per unit. Benefit: 5× speedup on transcendental-heavy kernels (raytracing, signal processing).
+        </p>
+
+        <h3>SFU Latency Analysis</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Operation</th>
+                    <th>SFU (Hardware)</th>
+                    <th>Software (ALU+FSU)</th>
+                    <th>Speedup</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>sin(x) FP32</td>
+                    <td>4 cycles</td>
+                    <td>20 cycles (poly)</td>
+                    <td>5×</td>
+                </tr>
+                <tr>
+                    <td>exp(x)</td>
+                    <td>4 cycles</td>
+                    <td>24 cycles</td>
+                    <td>6×</td>
+                </tr>
+                <tr>
+                    <td>1/sqrt(x)</td>
+                    <td>4 cycles</td>
+                    <td>16 cycles (Newton)</td>
+                    <td>4×</td>
+                </tr>
+                <tr>
+                    <td>log(x)</td>
+                    <td>4 cycles</td>
+                    <td>28 cycles</td>
+                    <td>7×</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>SFU in tiny-gpu</h3>
+
+        <p>
+            tiny-gpu does <strong>not</strong> include SFU—it's a minimal design. To understand what SFU does, imagine adding:
+        </p>
+
+        <div class="code-block">
+<pre>// Hypothetical tiny-gpu SFU module
+module sfu (
+    input  clk,
+    input  [31:0] x,          // FP32 input
+    input  [2:0]  opcode,     // 0=sin, 1=exp, 2=sqrt
+    output [31:0] result,     // FP32 output
+    output        valid       // Result ready
+);
+    // Piecewise polynomial lookup + Newton-Raphson
+    // Latency: 4 cycles
+    // Area: ~5K transistors
+endmodule
+        </pre>
+        </div>
+
+        <h2>10.3 Ray Tracing Acceleration</h2>
+
+        <p>
+            Modern GPUs (RTX, RDNA 3) include <strong>dedicated ray tracing cores</strong> that accelerate scene intersection and BVH traversal—a compute-intensive algorithm in raytraced graphics.
+        </p>
+
+        <h3>The Ray Tracing Problem</h3>
+
+        <div class="mermaid">
+            graph TB
+            A["For each pixel:<br/>Cast ray from camera"] --> B["For each ray:<br/>Intersect with 1000s of triangles"]
+            B --> C["Find closest<br/>hit triangle"]
+            C --> D["Shade pixel<br/>Reflect/refract"]
+            
+            style A fill:#fff3e0
+            style C fill:#ffccbc
+            style D fill:#c8e6c9
+        </div>
+
+        <p>
+            <strong>The Cost:</strong> Each ray traces through a BVH (Bounding Volume Hierarchy) tree, testing intersection against hundreds of triangles. With screen resolution 1920×1080 and multiple rays per pixel, this is <strong>billions of intersection tests per frame</strong>.
+        </p>
+
+        <h3>RT Core Speedup</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Without RT Core</th>
+                    <th>With RT Core</th>
+                    <th>Speedup</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Triangle Intersection</td>
+                    <td>~15 cycles (ALU)</td>
+                    <td>~2 cycles (hardwired)</td>
+                    <td>7.5×</td>
+                </tr>
+                <tr>
+                    <td>BVH Node Traversal</td>
+                    <td>Memory-dependent</td>
+                    <td>Optimized dataflow</td>
+                    <td>2-3×</td>
+                </tr>
+                <tr>
+                    <td>Frame Time (1080p)</td>
+                    <td>50 ms (20 fps)</td>
+                    <td>8 ms (125 fps)</td>
+                    <td>6×</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>RT Core Anatomy</h3>
+
+        <p>
+            An NVIDIA RT core (Turing+) includes:
+        </p>
+
+        <ul>
+            <li><strong>Triangle Intersection Unit:</strong> Hardwired ray-triangle intersection (Möller-Trumbore algorithm)
+            <li><strong>BVH Traversal Cache:</strong> Keeps frequently accessed BVH nodes near-chip
+            <li><strong>Compression Engine:</strong> Stores BVH nodes in compressed format (saves memory bandwidth)
+        </ul>
+
+        <h2>10.4 Crypto Accelerators</h2>
+
+        <p>
+            GPUs increasingly include <strong>AES, SHA, and other cryptographic engines</strong> for accelerated encryption/decryption, relevant for secure computation and privacy-preserving machine learning.
+        </p>
+
+        <h3>Crypto Hardware Examples</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Algorithm</th>
+                    <th>Throughput (ALU)</th>
+                    <th>Throughput (Hardware)</th>
+                    <th>Speedup</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>AES-128 (per block)</td>
+                    <td>~50 cycles</td>
+                    <td>~4 cycles (pipelined)</td>
+                    <td>12×</td>
+                </tr>
+                <tr>
+                    <td>SHA-256 (per message)</td>
+                    <td>~80 cycles</td>
+                    <td>~8 cycles (pipelined)</td>
+                    <td>10×</td>
+                </tr>
+                <tr>
+                    <td>EdDSA (signature)</td>
+                    <td>~10k cycles</td>
+                    <td>~1k cycles (with assist)</td>
+                    <td>10×</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            <strong>Grade 5 Analogy:</strong> A password is like a secret code. Checking if someone has the right password takes time if you check letter-by-letter (ALU). A special checker (crypto accelerator) compares the entire password instantly.
+        </p>
+
+        <h2>10.5 Performance Summary: Specialization Trade-offs</h2>
+
+        <div class="mermaid">
+            graph TB
+            A["Specialized Hardware"] --> B["Tensor Cores"]
+            A --> C["SFU"]
+            A --> D["RT Cores"]
+            A --> E["Crypto"]
+            
+            B --> F["AI/ML: 8-16× faster"]
+            C --> G["Graphics/Science: 5-7× faster"]
+            D --> H["Raytracing: 6× faster"]
+            E --> I["Crypto: 10-12× faster"]
+            
+            style A fill:#bbdefb
+            style B fill:#90caf9
+            style C fill:#90caf9
+            style D fill:#90caf9
+            style E fill:#90caf9
+            style F fill:#c8e6c9
+            style G fill:#c8e6c9
+            style H fill:#c8e6c9
+            style I fill:#c8e6c9
+        </div>
+
+        <h3>The Trade-off: Area vs. Specialization</h3>
+
+        <p>
+            Including all these units costs transistors:
+        </p>
+
+        <ul>
+            <li><strong>Tensor Cores:</strong> ~40% of GPU area (but worth it for AI workloads)
+            <li><strong>SFU:</strong> ~5% of GPU area (cheap, frequently used)
+            <li><strong>RT Cores:</strong> ~10% of GPU area (essential for modern gaming)
+            <li><strong>Crypto:</strong> ~3% of GPU area (growing importance)
+        </ul>
+
+        <p>
+            A GPU with all four specialized units uses ~60% of its area on specialization, 40% on general-purpose ALUs and memory. This is the <strong>heterogeneous computing paradigm</strong>: optimize each part for its job.
+        </p>
+
+        <h3>Which Specialized Unit Should I Use?</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Workload</th>
+                    <th>Best Unit</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Deep Learning (LLMs, Vision)</td>
+                    <td>Tensor Cores</td>
+                    <td>Matrix ops dominate; 8-16× speedup</td>
+                </tr>
+                <tr>
+                    <td>Graphics Rendering</td>
+                    <td>SFU + RT Cores</td>
+                    <td>sin/cos common; raytracing essential</td>
+                </tr>
+                <tr>
+                    <td>Scientific Simulation</td>
+                    <td>SFU</td>
+                    <td>Transcendentals in physics kernels</td>
+                </tr>
+                <tr>
+                    <td>Encrypted AI (privacy-preserving ML)</td>
+                    <td>Crypto + Tensor</td>
+                    <td>Both acceleration and privacy</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>10.6 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 10.1: Tensor Core Memory Efficiency</h4>
+            <p>
+                A Tensor Core multiplies 4×4×4 matrix-multiply-accumulate (shape M=4, N=4, K=4) in 1 cycle. Each value is FP16 (2 bytes). How many bytes must be loaded from memory for one Tensor Core operation? What's the arithmetic intensity (operations per byte)?
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    <strong>Memory:</strong> Two input matrices (4×4) + one output matrix (4×4)
+                    <br/>= 16 + 16 + 16 = 48 values = 96 bytes (FP16)
+                    <br/>Actually, we accumulate, so output isn't loaded.
+                    <br/>= 32 values = 64 bytes (conservative; cache reuse common)
+                </p>
+                <p>
+                    <strong>Operations:</strong> M×N×K = 4×4×4 = 64 multiplies + 64 accumulates = 128 ops
+                </p>
+                <p>
+                    <strong>Arithmetic Intensity:</strong> 128 ops / 64 bytes ≈ 2 ops/byte
+                    <br/>With cache reuse across blocks: up to 8 ops/byte! (This is why Tensor Cores saturate memory bandwidth.)
+                </p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 10.2: SFU vs. Software Latency Hiding</h4>
+            <p>
+                You're writing a raycasting kernel. Each ray tests intersection with 100 objects, each requiring sin/cos calculations. Without SFU:
+                <br/>- Per ray: 200 sin/cos ops × 20 cycles each = 4000 cycles
+                <br/>With SFU:
+                <br/>- Per ray: 200 sin/cos ops × 4 cycles each = 800 cycles
+                <br/>How many warp-groups (assume 32-thread warp) must you run concurrently to hide the SFU latency? (Assume 32 cycles between ray casts.)
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    With SFU, latency per ray = 800 cycles.
+                    <br/>You issue operations every 32 cycles (one per cycle per warp per thread ≈ throughput).
+                    <br/>Warps needed to hide = 800 / 32 = 25 warps
+                    <br/>= 25 × 32 threads = 800 threads
+                    <br/>Modern GPUs achieve this easily; older ones would stall.
+                </p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 10.3: RT Core Trade-off</h4>
+            <p>
+                An RT core costs 2% of GPU area. Without it, a raytracing benchmark runs in 50 ms. With it, 8 ms. Is the 2% area worth it? Assume GPU cost is $1 per 1M transistors, and a single raytraced frame is monetized at $0.001 (cloud rendering).
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    <strong>Speedup:</strong> 50 ms → 8 ms = 6.25× faster
+                    <br/>Frames per second: 20 fps → 125 fps (massive!)
+                </p>
+                <p>
+                    <strong>Cost:</strong> 2% area for an A100 (108B transistors) = 2.16B transistors ≈ $2160
+                </p>
+                <p>
+                    <strong>Revenue:</strong> 6.25× more frames per unit time = $0.00625 more per GPU-hour = $54.40 per GPU-day (assuming 24/7 utilization). Payback: ~40 days.
+                    <br/><em>Verdict: Highly worth it for data center GPUs!</em>
+                </p>
+            </details>
+        </div>
+
+        <h2>10.7 Further Reading</h2>
+
+        <ul>
+            <li><strong>Tensor Cores:</strong> NVIDIA GTC 2019 – "Tensor Cores in NVIDIA A100" (arxiv paper)
+            <li><strong>SFU Design:</strong> IEEE Micro – "Fast Hardware Transcendental Functions" (2008)
+            <li><strong>RT Cores:</strong> NVIDIA GTC 2018 – "Turing GPU Architecture" whitepaper
+            <li><strong>Crypto Hardware:</strong> ARM TrustZone documentation and Intel SGX papers
+        </ul>
+
+        <h2>10.8 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>Specialization Wins:</strong> A 128-cycle scalar operation becomes a 1-cycle Tensor Core operation. That's not optimization—that's <em>rethinking the problem</em>.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>SFU is a Best Practice:</strong> For just 5% area, you get 5-7× speedup on transcendentals. Every GPU includes it because the ROI is insane.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>RT Cores Evolved for Reason:</strong> Raytracing jumped from 1% of workload (pre-2018) to 30% (post-2020). Dedicated hardware became essential. This shows how architecture follows workload trends.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>Heterogeneous Design Rules Modern GPUs:</strong> No single unit excels at everything. Tensor Cores win at AI, SFU at graphics, RT Cores at raytracing. Knowing which specialized unit to use is the new "GPU optimization."</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-09.html">← Previous: Thread Scheduling</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-11.html">Next: Graphics vs Compute →</a>
+        </div>
+    </div>
+</body>
+</html>

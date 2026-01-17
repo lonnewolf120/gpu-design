@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 8: Memory Coalescing | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 850px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
+        .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; overflow-x: auto; }
+        .figure-caption { font-style: italic; color: var(--muted); margin: 10px 0 0 0; text-align: center; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        pre { font-size: 12px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div class="chapter-nav">
+            <a href="chapter-07.html">← Previous: Memory Hierarchy</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-09.html">Next: Thread Scheduling →</a>
+        </div>
+
+        <h1>Chapter 8: Memory Coalescing</h1>
+        
+        <div class="meta" style="color: var(--muted); margin: 20px 0;">
+            <span>Part II: Execution & Scheduling</span> • 
+            <span>Reading time: ~50 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+
+        <p>
+            Memory coalescing is the #1 optimization technique for GPU performance. A single missed 
+            optimization here can cost 10-100× slowdown.
+        </p>
+
+        <p>
+            Here's the problem: Threads run in parallel and often need to load data. The naive approach 
+            (thread 0 loads address 0, thread 1 loads address 4, etc.) works but is inefficient. 
+            Smart GPUs <strong>coalesce</strong> these individual requests into fewer, larger memory transactions.
+        </p>
+
+        <h2>8.1 The Coalescing Problem</h2>
+
+        <h3>Example: Uncoalesced Access</h3>
+
+        <div class="code-block">
+<pre>// Uncoalesced: Each thread loads from a different address
+__global__ void uncoalesced_load(float *data) {
+    int tid = threadIdx.x;  // tid = 0..31
+    int stride = 1024;      // Large stride!
+    
+    float value = data[tid * stride];  // Thread 0→addr 0
+                                       // Thread 1→addr 1024
+                                       // Thread 2→addr 2048
+                                       // ...
+                                       // Thread 31→addr 31744
+    
+    // Do work with value...
+}
+
+Memory access pattern:
+  Thread 0: addr 0       ┐
+  Thread 1: addr 1024    │
+  Thread 2: addr 2048    │ All in separate cache lines!
+  ...                    │ Need 32 separate memory transactions
+  Thread 31: addr 31744  ┘
+
+Result: 32× worst-case bandwidth utilization
+        (Only 1/32 of cache line is useful)</pre>
+        </div>
+
+        <h3>Example: Coalesced Access</h3>
+
+        <div class="code-block">
+<pre>// Coalesced: Threads load from consecutive addresses
+__global__ void coalesced_load(float *data) {
+    int tid = threadIdx.x;  // tid = 0..31
+    
+    float value = data[tid];  // Thread 0→addr 0
+                              // Thread 1→addr 4
+                              // Thread 2→addr 8
+                              // ...
+                              // Thread 31→addr 124
+    
+    // Do work with value...
+}
+
+Memory access pattern:
+  Thread 0: addr 0   ┐
+  Thread 1: addr 4   │
+  Thread 2: addr 8   │ All in same 128-byte cache line
+  ...                │ Single memory transaction!
+  Thread 31: addr 124┘
+
+Result: 32× better bandwidth utilization
+        (128 bytes fetched, all useful data)
+        (Speedup over uncoalesced: 32×)</pre>
+        </div>
+
+        <h2>8.2 How Coalescing Works</h2>
+
+        <h3>Memory Transaction Grouping</h3>
+
+        <p>
+            The memory controller looks at all warp requests and groups them:
+        </p>
+
+        <div class="figure">
+            <pre>Warp 0 (32 threads) issue loads simultaneously:
+┌─────────────────────────────────────────────────┐
+│ Memory Load Requests from 32 threads            │
+├─────────────────────────────────────────────────┤
+│ Thread 0: Load addr 0x1000                      │
+│ Thread 1: Load addr 0x1004                      │
+│ Thread 2: Load addr 0x1008                      │
+│ ...                                             │
+│ Thread 31: Load addr 0x107C                     │
+│                                                 │
+│ All addresses fall within range [0x1000-0x107F]│
+│ = 128 bytes = 1 cache line                      │
+└──────────────────┬──────────────────────────────┘
+                   │
+                   ▼
+    ┌──────────────────────────┐
+    │ Coalescing Engine        │
+    │                          │
+    │ Detects coalescing:      │
+    │ - All addrs in range     │
+    │ - Single transaction     │
+    │ - 32× bandwidth savings! │
+    └──────────────┬───────────┘
+                   │
+                   ▼
+    ┌──────────────────────────┐
+    │ Single 128-byte fetch    │
+    │ from L1/L2 cache         │
+    └──────────────┬───────────┘
+                   │
+                   ▼
+    ┌──────────────────────────┐
+    │ Distribute 128 bytes     │
+    │ to 32 threads (4B each)  │
+    └──────────────────────────┘</pre>
+            <div class="figure-caption">Figure 8.1: Coalescing transaction grouping</div>
+        </div>
+
+        <h3>Coalescing Rules</h3>
+
+        <p>
+            For maximum bandwidth, follow these rules:
+        </p>
+
+        <ul>
+            <li><strong>Rule 1:</strong> Warp threads should access consecutive or nearby addresses</li>
+            <li><strong>Rule 2:</strong> Access patterns should align with cache line boundaries</li>
+            <li><strong>Rule 3:</strong> Avoid strided access (large gaps between thread addresses)</li>
+        </ul>
+
+        <h2>8.3 Coalescing Patterns</h2>
+
+        <h3>Pattern 1: Sequential (Best)</h3>
+
+        <div class="code-block">
+<pre>// GOOD: Sequential access
+__global__ void vector_add(float *a, float *b, float *c) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    c[i] = a[i] + b[i];  // i=0, 1, 2, 3, ...
+}
+
+Access pattern:
+  Thread 0: a[0], b[0], c[0]    = addrs 0, 1000, 2000
+  Thread 1: a[1], b[1], c[1]    = addrs 4, 1004, 2004
+  Thread 2: a[2], b[2], c[2]    = addrs 8, 1008, 2008
+  ...
+  
+All addresses: [0, 4, 8, 12, ..., 124] ← Single cache line
+Coalescing: ✓ Perfect! 1 transaction per array
+
+Result: Peak bandwidth (100% utilization)
+        </pre>
+        </div>
+
+        <h3>Column-Major Access (Bad)</h3>
+
+        <div class="code-block">
+<pre>// BAD: Column-major access breaks coalescing
+__global__ void matrix_column_major(float *matrix, int cols, int rows) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Access by column (stride = cols)
+    float value = matrix[col * rows + row];  // Large stride!
+    
+    // Within same block (32×32 threads, assuming threadIdx.x varies):
+    // Thread (0,0): addr = 0 * rows + 0
+    // Thread (0,1): addr = 1 * rows + 0 (huge jump!)
+    // Thread (0,2): addr = 2 * rows + 0 (another jump!)
+    // → All scattered across memory
+    // → Terrible coalescing: 32 separate transactions!
+}
+
+Memory layout problem:
+  Col 0: [addr 0] [addr 1] ... [addr rows-1]
+  Col 1: [addr rows] [addr rows+1] ... [addr 2*rows-1]
+  Col 2: ...
+  
+Threads in warp access: addr 0, addr rows, addr 2*rows, ...
+Coalescing: ✗ Each thread accesses different cache line</pre>
+        </div>
+
+        <h2>8.4 Optimization Techniques</h2>
+
+        <h3>Transpose for Better Coalescing</h3>
+
+        <div class="code-block">
+<pre>// Optimize: Load into shared memory, transpose, then use
+__global__ void matrix_transpose_optim(float *in, float *out, int N) {
+    __shared__ float tile[32][32];
+    
+    int bx = blockIdx.x * 32;
+    int by = blockIdx.y * 32;
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    
+    // Load with coalescing (row-major)
+    tile[ty][tx] = in[(by + ty) * N + (bx + tx)];
+    __syncthreads();
+    
+    // Write back with coalescing (row-major, but swapped indices)
+    out[(bx + ty) * N + (by + tx)] = tile[tx][ty];
+}
+
+Why this works:
+  Phase 1: Load tile[ty][tx] ← in[...tx...] (coalesced in x)
+  Phase 2: Use shared memory (fast local access, no coalescing needed)
+  Phase 3: Write out[...tx...] = tile[...] (coalesced in x again)
+  
+Shared memory acts as a "coalescing buffer"!
+
+        <h2>8.5 Performance Analysis</h2>
+
+        <h3>Measuring Coalescing Efficiency</h3>
+
+        <div class="code-block">
+<pre>Coalescing efficiency metrics:
+
+Ideal transactions = ceil(max_addr - min_addr) / cache_line_size
+Actual transactions = number issued by GPU
+
+Efficiency = Ideal / Actual × 100%
+
+Example 1: Sequential access
+  Addresses: 0, 4, 8, ..., 124 (32 threads × 4 bytes)
+  Max-Min = 124 - 0 = 124 bytes
+  Ideal transactions = 124 / 128 = 1
+  Actual = 1
+  Efficiency = 100% ✓
+
+Example 2: Large stride (stride=1024)
+  Addresses: 0, 1024, 2048, ..., 31744
+  Max-Min = 31744 bytes
+  Ideal = 31744 / 128 = 248 (worst case: one per thread)
+  Actual = 32 (GPU coalesces somewhat)
+  Efficiency = 248 / 32 = 7.75% ✗
+
+Rule of thumb: Efficiency > 90% = good
+              Efficiency < 50% = needs optimization
+
+        <h3>How the GPU Detects Coalescing</h3>
+
+        <div class="figure">
+            <pre>Warp Load Request Processing:
+
+Step 1: Collect all 32 thread addresses
+  ┌──────────────────────────────────────┐
+  │ Warp Load Unit                       │
+  │ Threads 0-31 request loads           │
+  │ addr[0], addr[1], ..., addr[31]      │
+  └────────────┬─────────────────────────┘
+               │
+               ▼
+Step 2: Check if addresses fit in cache line
+  ┌──────────────────────────────────────┐
+  │ Coalescing Engine                    │
+  │                                      │
+  │ Min addr = 0x1000                   │
+  │ Max addr = 0x107C                   │
+  │ Range = 0x80 (128 bytes)            │
+  │                                      │
+  │ Fits in 128-byte line? YES ✓        │
+  │ → Single transaction                │
+  │                                      │
+  │ Fits in 256-byte line? YES ✓        │
+  │ → Could use 256B prefetch           │
+  └────────────┬─────────────────────────┘
+               │
+               ▼
+Step 3: Issue memory transaction
+  ┌──────────────────────────────────────┐
+  │ Cache Miss/Hit Unit                  │
+  │ Check L1 for [0x1000-0x107F]         │
+  │                                      │
+  │ If hit: Return data (20 cy)          │
+  │ If miss: Fetch from L2/DRAM          │
+  └──────────────┬─────────────────────────┘
+               │
+               ▼
+Step 4: Distribute data to threads
+  ┌──────────────────────────────────────┐
+  │ Thread 0 ← byte 0                    │
+  │ Thread 1 ← byte 4                    │
+  │ ...                                  │
+  │ Thread 31 ← byte 124                 │
+  └──────────────────────────────────────┘</pre>
+            <div class="figure-caption">Figure 8.1: Coalescing detection flow</div>
+        </div>
+
+        <h2>8.3 2D Memory Access Patterns</h2>
+
+        <h3>Row-Major Access (Good)</h3>
+
+        <div class="code-block">
+<pre>// GOOD: Row-major access coalesces perfectly
+__global__ void matrix_row_major(float *matrix, int cols) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Linear address in memory
+    float value = matrix[row * cols + col];
+    
+    // Within same block (32×32 threads):
+    // Thread (0,0): addr = 0*cols + 0
+    // Thread (0,1): addr = 0*cols + 1
+    // Thread (0,2): addr = 0*cols + 2
+    // ...
+    // Thread (0,31): addr = 0*cols + 31
+    // → All in row 0, consecutive columns
+    // → Perfect coalescing!
+}
+
+Memory layout (32×32 block):
+  Row 0: [addr 0] [addr 1] ... [addr 31] ← Warp 0 threads
+  Row 1: [addr cols] [addr cols+1] ... [addr cols+31] ← Warp 1
+  
+Coalescing: ✓ Each warp accesses consecutive addresses

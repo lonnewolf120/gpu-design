@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 11: Graphics vs Compute Pipelines | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-10.html">← Previous: Advanced Execution Units</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-12.html">Next: Software Stack →</a>
+        </div>
+
+        <h1>Chapter 11: Graphics vs Compute Pipelines</h1>
+        
+        <div style="color: #999; margin: 20px 0;">
+            <span>Part II: Execution & Scheduling</span> • 
+            <span>Reading time: ~65 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+
+        <p>
+            Modern GPUs support two computational paradigms: <strong>Graphics</strong> (rendering triangles for display) and <strong>Compute</strong> (general-purpose SIMT kernels). They're <em>unified</em> in hardware today, but execute very differently.
+        </p>
+
+        <h2>11.1 Graphics Pipeline: Rasterization</h2>
+
+        <p>
+            The graphics pipeline is <strong>fixed-function</strong> and optimized for one task: rendering triangles to pixels. It cannot be repurposed.
+        </p>
+
+        <div class="mermaid">
+            graph TB
+            A["3D Geometry<br/>Vertices + Triangles"] --> B["Vertex Shader<br/>1 thread/vertex"]
+            B --> C["Rasterization<br/>Hardware: point-in-triangle"]
+            C --> D["Fragment Shader<br/>1 thread/fragment"]
+            D --> E["Output Merge<br/>Depth test, blend"]
+            E --> F["2D Framebuffer<br/>RGB(A) pixels"]
+            
+            style A fill:#e3f2fd
+            style B fill:#bbdefb
+            style C fill:#90caf9
+            style D fill:#bbdefb
+            style E fill:#90caf9
+            style F fill:#c8e6c9
+        </div>
+
+        <h3>Vertex Shader</h3>
+
+        <p>
+            <strong>Purpose:</strong> Transform vertices from model space to clip space (post-projection).
+        </p>
+
+        <p>
+            <strong>Execution:</strong> One thread per vertex. Independent of screen resolution.
+        </p>
+
+        <div class="code-block">
+<pre>// Vertex Shader (GLSL)
+in vec3 position;   // Vertex position from mesh
+in vec3 normal;     // Vertex normal for lighting
+in vec2 texcoord;   // Texture coordinates
+
+out vec3 v_normal;  // Interpolated to fragment
+out vec2 v_texcoord;
+
+uniform mat4 mvp;   // Model-View-Projection matrix
+
+void main() {
+    // Transform to clip space
+    gl_Position = mvp * vec4(position, 1.0);
+    
+    // Pass to next stage
+    v_normal = normal;
+    v_texcoord = texcoord;
+}
+        </pre>
+        </div>
+
+        <h3>Rasterization (Fixed Hardware)</h3>
+
+        <p>
+            <strong>What it does:</strong> For each triangle, determine which pixels it covers using edge equations.
+        </p>
+
+        <p>
+            <strong>Key point:</strong> <em>You cannot change this.</em> It's hardwired into the GPU.
+        </p>
+
+        <p>
+            <strong>Algorithm:</strong>
+        </p>
+
+        <ol>
+            <li>Compute bounding box for triangle
+            <li>For each pixel in bounding box: evaluate edge equations
+            <li>If point is inside triangle: generate fragment and interpolate attributes (color, normal, texcoord)
+            <li>Queue fragment for fragment shader
+        </ol>
+
+        <h3>Fragment Shader</h3>
+
+        <p>
+            <strong>Purpose:</strong> Compute the final color for each fragment (pixel-like unit).
+        </p>
+
+        <p>
+            <strong>Execution:</strong> One thread per fragment. Thousands of fragments may execute in parallel.
+        </p>
+
+        <div class="code-block">
+<pre>// Fragment Shader (GLSL)
+in vec3 v_normal;       // From vertex shader (interpolated)
+in vec2 v_texcoord;
+
+out vec4 out_color;     // Final fragment color
+
+uniform sampler2D tex;  // Texture sampler
+
+void main() {
+    // Sample texture
+    vec4 color = texture(tex, v_texcoord);
+    
+    // Compute lighting
+    vec3 light_dir = normalize(vec3(1, 1, 1));
+    float diffuse = max(dot(v_normal, light_dir), 0.0);
+    
+    // Final color
+    out_color = color * (0.2 + 0.8 * diffuse);  // Ambient + diffuse
+}
+        </pre>
+        </div>
+
+        <h3>Output Merge (Fixed Hardware)</h3>
+
+        <p>
+            <strong>What it does:</strong> Depth testing and color blending before writing to framebuffer.
+        </p>
+
+        <ol>
+            <li><strong>Depth Test:</strong> If fragment's Z > existing pixel's Z, discard (occluded)
+            <li><strong>Stencil Test:</strong> Complex masking operations (optional)
+            <li><strong>Blending:</strong> out_color = src * src_blend_factor + dst * dst_blend_factor
+            <li><strong>Write:</strong> Atomic write to framebuffer (serialized)
+        </ol>
+
+        <h2>11.2 Compute Pipeline</h2>
+
+        <p>
+            Compute is the <strong>opposite:</strong> fully flexible, no fixed stages, data-parallel.
+        </p>
+
+        <div class="mermaid">
+            graph TB
+            A["CUDA/HIP Kernel"] --> B["Grid of Thread Blocks"]
+            B --> C["Blocks → Cores"]
+            C --> D["Threads Execute<br/>Any code"]
+            D --> E["Synchronize<br/>via barriers"]
+            E --> F["Write to<br/>Global Memory"]
+            
+            style A fill:#fff3e0
+            style B fill:#ffe0b2
+            style C fill:#ffcc80
+            style D fill:#ffe0b2
+            style E fill:#ffcc80
+            style F fill:#c8e6c9
+        </div>
+
+        <p>
+            <strong>Key differences from graphics:</strong>
+        </p>
+
+        <ul>
+            <li>No fixed stages
+            <li>Flexible indexing: write to any memory address
+            <li>Sync points: barriers, atomics
+            <li>No hardware rasterizer
+        </ul>
+
+        <div class="code-block">
+<pre>// Simple compute kernel: vector add
+__global__ void vec_add(float *a, float *b, float *c, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n) {
+        c[idx] = a[idx] + b[idx];
+    }
+}
+
+// Launch: vec_add<<<(n+255)/256, 256>>>(a, b, c, n);
+// Each thread is independent, no fixed stages
+        </pre>
+        </div>
+
+        <h2>11.3 Graphics vs Compute: Side-by-Side</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Graphics</th>
+                    <th>Compute</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Pipeline stages</td>
+                    <td>Fixed: VS→Rast→FS→OM</td>
+                    <td>Flexible, custom</td>
+                </tr>
+                <tr>
+                    <td>Memory access</td>
+                    <td>Structured (texture, sampler)</td>
+                    <td>Unstructured (any address)</td>
+                </tr>
+                <tr>
+                    <td>Synchronization</td>
+                    <td>Implicit (pipeline stages)</td>
+                    <td>Explicit (barriers, atomics)</td>
+                </tr>
+                <tr>
+                    <td>Thread count</td>
+                    <td>Dependent on vertex/fragment count</td>
+                    <td>Independent (user specifies)</td>
+                </tr>
+                <tr>
+                    <td>Output</td>
+                    <td>Always to framebuffer</td>
+                    <td>Global memory (flexible)</td>
+                </tr>
+                <tr>
+                    <td>Optimization focus</td>
+                    <td>Fill rate, rasterization</td>
+                    <td>Memory bandwidth, latency hiding</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>11.4 Unified Architecture: Merging Graphics and Compute</h2>
+
+        <p>
+            Modern GPUs (since ~2008) unify both into a single ISA, but they don't run simultaneously:
+        </p>
+
+        <ul>
+            <li><strong>Graphics Mode:</strong> GPU switches to fixed-function rasterizer
+            <li><strong>Compute Mode:</strong> GPU executes user kernels (rasterizer disabled)
+            <li><strong>Handoff:</strong> Graphics pipeline outputs framebuffer → compute can read it
+        </ul>
+
+        <p>
+            <strong>Memory Hierarchy Differences:</strong>
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Level</th>
+                    <th>Graphics Priority</th>
+                    <th>Compute Priority</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Registers</td>
+                    <td>Moderate (256 per thread)</td>
+                    <td>High (up to 512 per thread)</td>
+                </tr>
+                <tr>
+                    <td>Shared Memory</td>
+                    <td>Small (used for staging)</td>
+                    <td>Large (up to 96 KB per block)</td>
+                </tr>
+                <tr>
+                    <td>L1/L2 Cache</td>
+                    <td>Optimized for texture</td>
+                    <td>Optimized for random access</td>
+                </tr>
+                <tr>
+                    <td>VRAM Bandwidth</td>
+                    <td>Optimized for graphics</td>
+                    <td>Full bandwidth available</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>11.5 Performance Characteristics</h2>
+
+        <h3>Graphics Bottlenecks</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Bottleneck</th>
+                    <th>Cause</th>
+                    <th>Solution</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Vertex Limited</td>
+                    <td>Too many vertices (slow mesh)</td>
+                    <td>Simplify geometry, use LOD</td>
+                </tr>
+                <tr>
+                    <td>Rasterization Limited</td>
+                    <td>Too many triangles (overdraw)</td>
+                    <td>Back-face culling, occlusion culling</td>
+                </tr>
+                <tr>
+                    <td>Fragment Limited</td>
+                    <td>Complex fragment shader or high res</td>
+                    <td>Lower resolution or cheaper shader</td>
+                </tr>
+                <tr>
+                    <td>Fill Limited</td>
+                    <td>Bandwidth to framebuffer saturated</td>
+                    <td>Reduce framebuffer bit depth</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Compute Bottlenecks</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Bottleneck</th>
+                    <th>Metric</th>
+                    <th>Solution</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Occupancy</td>
+                    <td>&lt; 50% active warps</td>
+                    <td>Reduce registers/thread, increase block size</td>
+                </tr>
+                <tr>
+                    <td>Memory Bandwidth</td>
+                    <td>&lt; 80% of peak BW</td>
+                    <td>Improve data locality, use shared memory</td>
+                </tr>
+                <tr>
+                    <td>Latency</td>
+                    <td>Global memory stalls</td>
+                    <td>Prefetch, hide with more warps</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>11.6 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 11.1: Rasterization Fill Rate</h4>
+            <p>
+                A GPU can launch 1 fragment per clock (peak rasterization rate). Your scene has 2M triangles, each covering 100 pixels on average. Screen is 1920×1080. What's the maximum fill rate in megapixels per second if GPU runs at 2 GHz?
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    Fragments generated: 2M triangles × 100 pixels = 200M fragments
+                    <br/>At 2 GHz, max fragments/sec = 2 × 10^9 per second
+                    <br/>But we need to account for overdraw (framebuffer writes are bottleneck):
+                    <br/>Peak fill rate = 1 fragment/clock × 2 GHz = 2 billion pixels/sec = 2000 megapixels/sec
+                    <br/>Your kernel can generate 200M fragments, which takes 100ms (200M / 2B)
+                </p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 11.2: Compute Occupancy vs Graphics</h4>
+            <p>
+                A compute kernel uses 64 registers per thread and 16 KB shared memory per block. Maximum thread block size is 256 threads.
+                <br/>GPU has 96 KB shared memory per core, 8 registers per thread available.
+                <br/>What's the maximum occupancy (active threads / total possible threads)?
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    Shared memory constraint: 96 KB / 16 KB = 6 blocks max per core
+                    <br/>Register constraint: (256 threads × 64 regs) / (256 regs per core) = 64 regs per core... wait, that's backwards.
+                    <br/>Actually: GPU has 256K registers per core, so 256K / 64 = 4096 threads max
+                    <br/>Block is 256 threads, so 4096 / 256 = 16 blocks max per core
+                    <br/>Bottleneck: shared memory limits to 6 blocks
+                    <br/>Occupancy = (6 blocks × 256 threads) / 4096 max = 1536 / 4096 = 37.5%
+                </p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 11.3: Graphics-Compute Hybrid</h4>
+            <p>
+                You're rendering a scene with physics simulation. Compute kernel updates 1M particles every frame. Graphics pipeline renders 10M triangles (from particles). Both take 5ms. Can you overlap them? Why/why not?
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>
+                    <strong>Answer: No, not on same GPU cores.</strong>
+                    <br/>Modern GPUs switch between graphics and compute modes, but not simultaneously.
+                    <br/>You must wait for compute to finish → then do graphics → then present.
+                    <br/>Total: 5ms compute + 5ms graphics = 10ms (60 fps limit)
+                    <br/><em>Solution: Use two GPUs or multi-queue hardware (AMD RDNA2+, NVIDIA Ampere+) for true parallelism</em>
+                </p>
+            </details>
+        </div>
+
+        <h2>11.7 Further Reading</h2>
+
+        <ul>
+            <li><strong>OpenGL Specification:</strong> Chapter 12 (fragment processing)
+            <li><strong>NVIDIA GPU Architecture (Whitepaper):</strong> Rasterization and texture units
+            <li><strong>GPU Gems 3, Chapter 22:</strong> "Graphics Interop" (mixing graphics and compute)
+            <li><strong>CUDA Programming Guide:</strong> Section 1.2 (unified architecture)
+        </ul>
+
+        <h2>11.8 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>Graphics Pipeline is Specialized:</strong> Rasterization is fixed hardware, optimized for triangle rendering. You cannot repurpose it for general compute.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>Compute is Flexible:</strong> Any dataflow, any memory pattern, any synchronization. Perfect for AI/science, not graphics.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>Modern GPUs Unify Both:</strong> Same cores run graphics or compute (not simultaneously), unified memory hierarchy, unified ISA. But the paradigms remain mentally distinct.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>Choose Your Paradigm Wisely:</strong> Graphics excels at rendering, compute excels at general-purpose. Mixing both on one GPU requires careful scheduling and synchronization.</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-10.html">← Previous: Advanced Execution Units</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-12.html">Next: Software Stack →</a>
+        </div>
+    </div>
+</body>
+</html>

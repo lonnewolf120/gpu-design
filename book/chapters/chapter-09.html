@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 9: Thread Scheduling | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-08.html">← Previous: Memory Coalescing</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-10.html">Next: Advanced Execution Units →</a>
+        </div>
+
+        <h1>Chapter 9: Thread Scheduling and Latency Hiding</h1>
+        
+        <div style="color: #999; margin: 20px 0;">
+            <span>Part II: Execution & Scheduling</span> • 
+            <span>Reading time: ~70 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+
+        <p>
+            The biggest secret of GPU performance: <strong>Thread scheduling hides latency</strong>.
+        </p>
+
+        <p>
+            When warp 0 issues a memory load that takes 200 cycles to complete, the GPU doesn't wait. 
+            Instead, it switches to warp 1, warp 2, ..., warp 15, doing useful work while warp 0 waits. 
+            This chapter explores <strong>how GPUs schedule warps</strong>, hide latency through parallelism, 
+            and maintain high throughput even when individual operations take hundreds of cycles.
+        </p>
+
+        <h2>9.1 Warp Scheduling Fundamentals</h2>
+
+        <h3>The Scheduler's Three Jobs</h3>
+
+        <ol>
+            <li><strong>Select which warp executes:</strong> Round-robin, priority, or other algorithms</li>
+            <li><strong>Check readiness:</strong> Is the warp waiting for data/synchronization?</li>
+            <li><strong>Issue one instruction:</strong> Send instruction to ALU, memory, or special unit</li>
+        </ol>
+
+        <h3>Latency Hiding Through Warp Switching</h3>
+
+        <p>
+            GPU utilization comes from having enough warps to cover latency. When one warp waits, others compute:
+        </p>
+
+        <div class="mermaid">
+            graph TB
+            A["Warp 0: LOAD instruction<br/>200 cycles latency"] --> B["Warp 1-15 execute<br/>while waiting"]
+            B --> C["By cycle 200:<br/>Other warps finish"]
+            C --> D["Data arrives for Warp 0"]
+            D --> E["No stall!<br/>Latency hidden"]
+            
+            style A fill:#ffebee
+            style E fill:#c8e6c9
+        </div>
+
+        <h3>Round-Robin Scheduling</h3>
+
+        <p>
+            Most GPUs use simple round-robin scheduling:
+        </p>
+
+        <div class="code-block">
+<pre>Round-Robin Scheduler (16 warps per SM):
+
+Cycle 1: Warp 0 executes instruction
+Cycle 2: Warp 1 executes instruction
+Cycle 3: Warp 2 executes instruction
+...
+Cycle 16: Warp 15 executes instruction
+Cycle 17: Warp 0 executes next instruction
+
+Each warp gets one instruction slot every 16 cycles.
+        </pre>
+        </div>
+
+        <h2>9.2 Occupancy and the Occupancy Myth</h2>
+
+        <h3>What is Occupancy?</h3>
+
+        <p>
+            <strong>Occupancy</strong> = (Active warps) / (Max warps per SM)
+        </p>
+
+        <p>
+            Example: NVIDIA A100 GPU
+        </p>
+
+        <ul>
+            <li>Max 64 warps per SM (2048 threads × 32 threads/warp)</li>
+            <li>If kernel launches 32 warps per SM, occupancy = 32/64 = 50%</li>
+            <li>If kernel launches 64 warps per SM, occupancy = 64/64 = 100%</li>
+        </ul>
+
+        <h3>The Occupancy Myth</h3>
+
+        <div class="engineer-note">
+            <strong>Critical Insight:</strong> 50% occupancy with excellent memory patterns 
+            outperforms 100% occupancy with poor cache usage. Occupancy is necessary but NOT sufficient.
+        </div>
+
+        <p>
+            Many engineers chase 100% occupancy, but this often hurts performance because:
+        </p>
+
+        <ul>
+            <li><strong>Shared memory pressure:</strong> More blocks → less shared memory per block</li>
+            <li><strong>Register pressure:</strong> More threads → fewer registers available</li>
+            <li><strong>Cache conflicts:</strong> More warps → more L1 misses from contention</li>
+            <li><strong>Memory bandwidth:</strong> More requests → contention for finite bandwidth</li>
+        </ul>
+
+        <h3>Case Study: Occupancy Tradeoff</h3>
+
+        <div class="code-block">
+<pre>// Kernel A: High occupancy, poor cache usage
+__global__ void kernel_a(float *data) {
+    int tid = threadIdx.x;
+    float sum = 0;
+    
+    // Strided access: TERRIBLE for cache!
+    for (int i = 0; i < 1000; i++)
+        sum += data[tid * 1000 + i];
+    
+    result[tid] = sum;
+}
+// Occupancy: 100% (uses 32 KB registers, little shared memory)
+// L1 cache hit rate: ~10% (scattered accesses)
+// Performance: ~50 GB/s (terrible!)
+
+// Kernel B: Lower occupancy, good cache usage
+__global__ void kernel_b(float *data) {
+    __shared__ float tile[32][32];  // Uses 4 KB shared memory
+    
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    
+    // Load with coalescing
+    tile[ty][tx] = data[...];
+    __syncthreads();
+    
+    // Reuse tile many times
+    float sum = 0;
+    for (int i = 0; i < 100; i++)
+        sum += tile[ty][i % 32];
+    
+    result[...] = sum;
+}
+// Occupancy: 50% (uses shared memory, reduces blocks/SM)
+// L1 cache hit rate: ~95% (tile stays local)
+// Performance: ~400 GB/s (excellent!)
+        </pre>
+        </div>
+
+        <h2>9.3 Dependency Tracking</h2>
+
+        <p>
+            The scheduler tracks dependencies to know which warps can execute:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Dependency Type</th>
+                    <th>Example</th>
+                    <th>Stall Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>RAW (Read-After-Write)</td>
+                    <td>r2 = r1 + 1; r3 = r2 + 1;</td>
+                    <td>4-5 cycles (ALU latency)</td>
+                </tr>
+                <tr>
+                    <td>Memory Load</td>
+                    <td>r1 = mem[addr]; use r1;</td>
+                    <td>20-200 cycles (L1/DRAM)</td>
+                </tr>
+                <tr>
+                    <td>Barrier (__syncthreads)</td>
+                    <td>...sync... } wait for all</td>
+                    <td>Until all threads reach barrier</td>
+                </tr>
+                <tr>
+                    <td>Shared Memory Bank Conflict</td>
+                    <td>Thread 0&1 access same bank</td>
+                    <td>Serialized, N cycles per thread</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>9.4 Performance Analysis: Hiding 200-Cycle Latency</h2>
+
+        <p>
+            Let's calculate exactly how many warps are needed to hide a 200-cycle DRAM latency:
+        </p>
+
+        <div class="code-block">
+<pre>Given:
+  - Memory latency: 200 cycles
+  - ALU latency: 4 cycles
+  - Warp scheduler: Round-robin
+  
+Math:
+  Number of warps needed = ceil(200 / ALU_latency) + overhead
+  = ceil(200 / 4) + 2
+  = 50 + 2
+  = 52 warps minimum
+  
+  Most GPUs have 64-128 warps per SM.
+  Result: Usually enough warps to hide latency completely!
+  
+Example timeline for 16 warps:
+  Cycle 1: Warp 0 issues LOAD (will take 200 cycles)
+  Cycles 2-17: Warps 1-15 execute 1 instruction each (~4 cy ea = 16 cycles)
+  Cycles 18-33: Warps 0-15 execute again (16 cycles)
+  ...
+  Cycles 190-201: Data arrives after ~200 cycles elapsed
+  
+  Total: 200+ cycles of work from other warps
+  Warp 0 stalls: 0 cycles! ✓
+        </pre>
+        </div>
+
+        <h2>9.5 Scheduler Implementation in Tiny GPU</h2>
+
+        <div class="code-block">
+<pre>// From src/scheduler.sv: Simple warp scheduler
+module scheduler #(
+    parameter NUM_WARPS = 4,
+    parameter WARP_SIZE = 32
+) (
+    input clk, reset,
+    
+    // Control outputs
+    output [NUM_WARPS-1:0] ready_warps,     // Which warps can execute
+    output [$clog2(NUM_WARPS)-1:0] selected_warp,
+    
+    // Dependency tracking
+    input [NUM_WARPS-1:0] mem_wait,         // Waiting for memory
+    input [NUM_WARPS-1:0] sync_wait         // Waiting at barrier
+);
+
+reg [$clog2(NUM_WARPS)-1:0] round_robin_ptr;
+
+// Round-robin selection
+always @(posedge clk) begin
+    if (reset)
+        round_robin_ptr <= 0;
+    else
+        round_robin_ptr <= (round_robin_ptr + 1) % NUM_WARPS;
+end
+
+// Skip warps that are stalled
+assign ready_warps = ~(mem_wait | sync_wait);
+assign selected_warp = round_robin_ptr;
+
+endmodule
+        </pre>
+        </div>
+
+        <h2>Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <strong>1. Scheduling hides latency:</strong> When one warp waits for memory (200 cycles), 
+            the scheduler switches to other warps doing useful work. No stalls!
+        </div>
+
+        <div class="key-takeaway">
+            <strong>2. Occupancy is not everything:</strong> 100% occupancy with poor memory patterns 
+            loses to 50% occupancy with excellent caching and coalescing.
+        </div>
+
+        <div class="key-takeaway">
+            <strong>3. Dependencies matter:</strong> Memory dependencies (RAW, barriers, bank conflicts) 
+            cause stalls. Avoid them through careful scheduling and synchronization.
+        </div>
+
+        <div class="key-takeaway">
+            <strong>4. Round-robin is sufficient:</strong> Simple round-robin scheduling works well 
+            for most workloads. Complex schedulers add little benefit.
+        </div>
+
+        <h2>Exercises</h2>
+
+        <div class="exercise">
+            <strong>Exercise 9.1:</strong> A kernel launches 32 threads per block on an A100 GPU 
+            (64 max warps per SM, 192 KB shared memory per SM).
+            <ul>
+                <li>How many blocks can fit per SM?</li>
+                <li>What is the occupancy (warps / 64)?</li>
+                <li>Is this good or bad?</li>
+            </ul>
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 9.2:</strong> A warp issues a memory load with 250-cycle latency. 
+            The GPU has 16 warps per SM and round-robin scheduling. 
+            How long until the data is available (assuming 4-cycle ALU latency for other warps)?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 9.3:</strong> Compare two kernels:
+            <ul>
+                <li>Kernel A: 100% occupancy, 20% L1 cache hit rate</li>
+                <li>Kernel B: 50% occupancy, 90% L1 cache hit rate</li>
+            </ul>
+            Which is faster? Why?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 9.4:</strong> Write pseudocode for a warp scheduler that prioritizes 
+            warps waiting for memory (give them priority over compute-heavy warps).
+        </div>
+
+        <h2>Further Reading</h2>
+
+        <ul>
+            <li><strong>NVIDIA CUDA Optimization Guide:</strong> <a href="https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/" target="_blank">Occupancy optimization</a></li>
+            <li><strong>Efficient GPU Kernels:</strong> <a href="https://developer.nvidia.com/blog/inside-volta/" target="_blank">Volta architecture whitepaper</a></li>
+            <li><strong>AMD GCN Scheduling:</strong> <a href="https://gpuopen.com/documentation/" target="_blank">GCN architecture details</a></li>
+            <li><strong>GPU Gems 3, Chapter 3:</strong> "Wrap queue scheduling for GPUs"</li>
+        </ul>
+
+        <div style="display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <a href="chapter-08.html">← Previous: Memory Coalescing</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-10.html">Next: Advanced Execution Units →</a>
+        </div>
+    </div>
+
+    <script src="../script.js"></script>
+</body>
+</html>

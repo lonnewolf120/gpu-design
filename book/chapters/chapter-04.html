@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 4: Core GPU Components | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
+        .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; }
+        .figure-caption { font-style: italic; color: var(--muted); margin-top: 10px; text-align: center; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; margin: 24px 0; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div class="chapter-nav">
+            <a href="chapter-03.html">← Previous: Parallel Execution</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-05.html">Next: ISA Design →</a>
+        </div>
+
+        <h1>Chapter 4: Core GPU Components</h1>
+        
+        <div class="meta" style="color: var(--muted); margin: 20px 0;">
+            <span>Part I: GPU Fundamentals</span> • 
+            <span>Reading time: ~60 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            Now that we understand <em>what</em> GPUs do (parallel execution with SIMT) and <em>why</em> 
+            (throughput over latency), it's time to look at <em>how</em> — the actual hardware components 
+            that make a GPU work.
+        </p>
+
+        <p>
+            In this chapter, we'll dissect a GPU core at the block diagram level. We'll examine:
+        </p>
+        <ul>
+            <li>Arithmetic Logic Units (ALUs) — the compute engines</li>
+            <li>Register files — ultra-fast thread-local storage</li>
+            <li>Program Counter (PC) and instruction fetch logic</li>
+            <li>Scheduler — the traffic controller for warps</li>
+            <li>Load/Store Unit (LSU) — the memory interface</li>
+            <li>Execution pipelines and datapath design</li>
+            <li>Control signals and Finite State Machines (FSMs)</li>
+            <li>How these components work together</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Bridge to Implementation:</strong> This chapter is conceptual but grounded in real hardware. 
+            When we get to Part IV (RTL implementation), you'll write Verilog code for every component discussed here.
+        </div>
+
+        <h2>4.1 The Big Picture: GPU Core Architecture</h2>
+
+        <p>
+            Let's start with a 10,000-foot view. A single GPU core (NVIDIA calls it an SM, AMD calls it a CU) 
+            contains all the components needed to execute multiple warps of threads. Here's a simplified block diagram:
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+┌─────────────────────────────────────────────────────────────────────┐
+│                         GPU CORE (SM / CU)                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────┐    ┌──────────────────────────────────────┐   │
+│  │ Instruction    │───▶│ Warp Scheduler                        │   │
+│  │ Fetch & Decode │    │ (Decides which warp executes next)    │   │
+│  └────────────────┘    └────────┬─────────────────────────────┘   │
+│                                  │                                  │
+│                                  ▼                                  │
+│  ┌────────────────────────────────────────────────────────────┐   │
+│  │                 Execution Units                             │   │
+│  ├─────────────┬─────────────┬──────────────┬─────────────────┤   │
+│  │ ALU Array   │ ALU Array   │ Load/Store   │ Special Func.   │   │
+│  │ (32 ALUs)   │ (32 ALUs)   │ Unit (LSU)   │ Unit (SFU)      │   │
+│  │ INT/FP ops  │ INT/FP ops  │ Memory ops   │ sin/cos/sqrt    │   │
+│  └─────────────┴─────────────┴──────────────┴─────────────────┘   │
+│                         ▲           │                               │
+│                         │           ▼                               │
+│  ┌────────────────────────────────────────────────────────────┐   │
+│  │                Register File                                │   │
+│  │  (65,536 32-bit registers shared across all threads)       │   │
+│  └────────────────────────────────────────────────────────────┘   │
+│                                  │                                  │
+│  ┌─────────────────┐             │      ┌─────────────────────┐   │
+│  │ Shared Memory   │◀────────────┴─────▶│ L1 Data Cache       │   │
+│  │ (48-96 KB)      │                    │ (128 KB)            │   │
+│  └─────────────────┘                    └─────────────────────┘   │
+│                         │                        │                 │
+│                         └────────┬───────────────┘                 │
+│                                  ▼                                  │
+│                       ┌──────────────────────┐                     │
+│                       │  L2 Cache Interface  │                     │
+│                       │  (to global memory)  │                     │
+│                       └──────────────────────┘                     │
+└─────────────────────────────────────────────────────────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.1: Simplified GPU core architecture</div>
+        </div>
+
+        <p>
+            Let's break down each component in detail.
+        </p>
+
+        <h2>4.2 Arithmetic Logic Unit (ALU)</h2>
+
+        <h3>What Does an ALU Do?</h3>
+        <p>
+            The ALU performs arithmetic and logical operations:
+        </p>
+        <ul>
+            <li><strong>Arithmetic:</strong> ADD, SUB, MUL, DIV</li>
+            <li><strong>Logical:</strong> AND, OR, XOR, NOT</li>
+            <li><strong>Comparison:</strong> SLT (set less than), SEQ (set equal)</li>
+            <li><strong>Bitwise:</strong> Shifts (SLL, SRL, SRA), rotates</li>
+        </ul>
+
+        <h3>Integer vs Floating-Point ALUs</h3>
+        <p>
+            Modern GPUs have separate execution units for:
+        </p>
+        <ul>
+            <li><strong>INT32 ALU:</strong> 32-bit integer operations (fast, simple, 1-cycle latency)</li>
+            <li><strong>FP32 ALU:</strong> Single-precision floating-point (IEEE 754, 4-6 cycle latency)</li>
+            <li><strong>FP64 ALU:</strong> Double-precision (slower, 8-16 cycle latency, often fewer units)</li>
+            <li><strong>FP16/BF16 ALU:</strong> Half-precision for AI workloads (2× throughput of FP32)</li>
+        </ul>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 12px;">
+FP32 ALU Block Diagram:
+┌──────────────────────────────────────────────┐
+│           32-bit Floating Point ALU          │
+├──────────────────────────────────────────────┤
+│  Inputs: A[31:0], B[31:0], opcode[3:0]      │
+│  Output: Result[31:0], flags (NaN, Inf, etc)│
+├──────────────────────────────────────────────┤
+│                                               │
+│  ┌─────────────┐  ┌─────────────┐           │
+│  │  Unpacker   │  │  Unpacker   │           │
+│  │  (extract   │  │  (extract   │           │
+│  │  sign, exp, │  │  sign, exp, │           │
+│  │  mantissa)  │  │  mantissa)  │           │
+│  └──────┬──────┘  └──────┬──────┘           │
+│         │                │                   │
+│         └────────┬───────┘                   │
+│                  ▼                           │
+│       ┌──────────────────────┐              │
+│       │   Operation Logic    │              │
+│       │  (ADD/MUL/FMA etc)   │              │
+│       └──────────┬───────────┘              │
+│                  ▼                           │
+│         ┌────────────────┐                  │
+│         │   Normalizer   │                  │
+│         │  (round result)│                  │
+│         └────────┬───────┘                  │
+│                  ▼                           │
+│         ┌────────────────┐                  │
+│         │    Packer      │                  │
+│         │ (reassemble)   │                  │
+│         └────────┬───────┘                  │
+│                  ▼                           │
+│            Result[31:0]                      │
+└──────────────────────────────────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.2: Floating-point ALU internals</div>
+        </div>
+
+        <h3>ALU Design Choices</h3>
+
+        <p>
+            When designing your GPU, you'll make trade-offs:
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+                <tr style="background: #f5f5f5;">
+                    <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Design Choice</th>
+                    <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Pros</th>
+                    <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Cons</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 12px;"><strong>Many simple ALUs</strong></td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">High throughput, good for SIMT</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">Large area, high power</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 12px;"><strong>Pipelined ALUs</strong></td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">Higher clock frequency</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">Increased latency, complexity</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 12px;"><strong>Fused multiply-add (FMA)</strong></td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">2× throughput for A*B+C (common in AI/HPC)</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">More complex, larger die area</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 12px;"><strong>Reduced FP64 support</strong></td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">Saves area/power (gaming GPUs)</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">Poor scientific computing performance</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="engineer-note">
+            <strong>Example:</strong> NVIDIA's RTX 4090 (gaming) has FP64 throughput 1/64th of FP32. 
+            The H100 (datacenter) has 1/2 ratio. Same architecture, different ALU ratios!
+        </div>
+
+        <h3>Simple ALU Implementation (Conceptual Verilog)</h3>
+
+        <div class="code-block">
+<pre>// Simplified 32-bit integer ALU
+module alu_int32 (
+    input  [31:0] a,           // Operand A
+    input  [31:0] b,           // Operand B
+    input  [3:0]  opcode,      // Operation select
+    output reg [31:0] result,  // Result
+    output reg zero,           // Zero flag
+    output reg overflow        // Overflow flag
+);
+
+    always @(*) begin
+        case (opcode)
+            4'b0000: result = a + b;           // ADD
+            4'b0001: result = a - b;           // SUB
+            4'b0010: result = a & b;           // AND
+            4'b0011: result = a | b;           // OR
+            4'b0100: result = a ^ b;           // XOR
+            4'b0101: result = ~a;              // NOT
+            4'b0110: result = a << b[4:0];     // SLL (shift left logical)
+            4'b0111: result = a >> b[4:0];     // SRL (shift right logical)
+            4'b1000: result = $signed(a) >>> b[4:0]; // SRA (shift right arithmetic)
+            4'b1001: result = (a < b) ? 1 : 0; // SLT (set less than)
+            4'b1010: result = (a == b) ? 1 : 0;// SEQ (set equal)
+            default: result = 32'h0;
+        endcase
+        
+        zero = (result == 32'h0);
+        overflow = /* overflow detection logic */;
+    end
+
+endmodule
+</pre>
+        </div>
+
+        <h2>4.3 Register File</h2>
+
+        <h3>Why Registers Matter</h3>
+        <p>
+            Registers are the <strong>fastest storage</strong> in a GPU. Every thread needs registers to store:
+        </p>
+        <ul>
+            <li>Local variables</li>
+            <li>Intermediate computation results</li>
+            <li>Loop counters</li>
+            <li>Function arguments/return values</li>
+        </ul>
+
+        <p>
+            GPUs have <strong>massive register files</strong>:
+        </p>
+        <ul>
+            <li>NVIDIA A100: 256 KB of registers per SM (65,536 × 32-bit registers)</li>
+            <li>AMD MI250X: 512 KB per CU</li>
+            <li>Each thread might use 16-64 registers</li>
+        </ul>
+
+        <h3>Register File Organization</h3>
+
+        <p>
+            Unlike CPUs with fixed register names (R0-R31), GPU register files are <strong>dynamically allocated</strong>:
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+Register File (65,536 registers total):
+┌─────────────────────────────────────────────────────────────┐
+│ Warp 0 (32 threads × 24 registers each) = 768 registers     │
+├─────────────────────────────────────────────────────────────┤
+│ Warp 1 (32 threads × 24 registers each) = 768 registers     │
+├─────────────────────────────────────────────────────────────┤
+│ Warp 2 (32 threads × 24 registers each) = 768 registers     │
+├─────────────────────────────────────────────────────────────┤
+│ ...                                                          │
+├─────────────────────────────────────────────────────────────┤
+│ Warp N                                                       │
+└─────────────────────────────────────────────────────────────┘
+
+Within a warp:
+Thread 0: R0-R23
+Thread 1: R0-R23  (different physical registers!)
+Thread 2: R0-R23
+...
+Thread 31: R0-R23
+            </pre>
+            <div class="figure-caption">Figure 4.3: Register file partitioning among warps</div>
+        </div>
+
+        <h3>Multi-Port Register File</h3>
+
+        <p>
+            To support parallel execution, register files need <strong>multiple read/write ports</strong>. 
+            A typical SIMD unit might need:
+        </p>
+        <ul>
+            <li>2-3 read ports (for operands A, B, C in FMA operations)</li>
+            <li>1 write port (for result)</li>
+            <li>Replicated across all 32 lanes in a warp</li>
+        </ul>
+
+        <div class="code-block">
+<pre>// Simplified register file (single-ported, 256 registers)
+module register_file #(
+    parameter NUM_REGS = 256,
+    parameter DATA_WIDTH = 32
+) (
+    input clk,
+    input [7:0] read_addr_a,   // Read port A
+    input [7:0] read_addr_b,   // Read port B
+    output [DATA_WIDTH-1:0] read_data_a,
+    output [DATA_WIDTH-1:0] read_data_b,
+    input write_enable,
+    input [7:0] write_addr,
+    input [DATA_WIDTH-1:0] write_data
+);
+
+    reg [DATA_WIDTH-1:0] regs [0:NUM_REGS-1];
+    
+    // Asynchronous read (combinational)
+    assign read_data_a = regs[read_addr_a];
+    assign read_data_b = regs[read_addr_b];
+    
+    // Synchronous write
+    always @(posedge clk) begin
+        if (write_enable) begin
+            regs[write_addr] <= write_data;
+        end
+    end
+
+endmodule
+</pre>
+        </div>
+
+        <div class="warning-box">
+            <strong>Occupancy Limiter:</strong> Register usage is often the bottleneck for occupancy. 
+            If your kernel uses 64 registers/thread and the SM has 65,536 registers, you can only run 
+            1,024 threads (32 warps) — far below the maximum of 2,048 threads.
+        </div>
+
+        <h3>Register Renaming and Banking</h3>
+
+        <p>
+            High-end GPUs use techniques from CPU design:
+        </p>
+        <ul>
+            <li><strong>Banking:</strong> Divide register file into banks to allow simultaneous access from different warps</li>
+            <li><strong>Register caching:</strong> Keep frequently accessed registers in faster SRAM</li>
+            <li><strong>Spilling:</strong> If kernel uses too many registers, compiler "spills" to local memory (slow!)</li>
+        </ul>
+
+        <h2>4.4 Program Counter (PC) and Instruction Fetch</h2>
+
+        <h3>What is the PC?</h3>
+
+        <p>
+            The <strong>Program Counter</strong> keeps track of which instruction to execute next. In a GPU:
+        </p>
+        <ul>
+            <li>Each <strong>warp</strong> has its own PC (not each thread!)</li>
+            <li>All threads in a warp execute the same instruction (SIMT)</li>
+            <li>PC increments by 1 (or more for wide instructions) each cycle</li>
+            <li>Branches update the PC conditionally</li>
+        </ul>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 12px;">
+PC and Instruction Fetch:
+┌───────────────────────────────────────────────────┐
+│                  Warp Scheduler                   │
+│  (Selects which warp executes this cycle)        │
+└────────────────┬──────────────────────────────────┘
+                 │ Selected warp ID
+                 ▼
+         ┌───────────────┐
+         │  PC Register  │  (One per warp)
+         │  Warp 0: 0x40 │
+         │  Warp 1: 0x38 │
+         │  Warp 2: 0x44 │
+         └───────┬───────┘
+                 │ Current PC
+                 ▼
+         ┌───────────────────┐
+         │ Instruction Cache │  (Stores kernel code)
+         │  (I-Cache)        │
+         └─────────┬─────────┘
+                   │ Fetched instruction
+                   ▼
+         ┌──────────────────┐
+         │   Decoder        │  (Decode instruction)
+         └─────────┬────────┘
+                   │ Control signals
+                   ▼
+         ┌──────────────────┐
+         │ Execute Units    │
+         └──────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.4: PC and instruction fetch pipeline</div>
+        </div>
+
+        <h3>Branch Handling</h3>
+
+        <p>
+            When a branch instruction executes:
+        </p>
+
+        <div class="code-block">
+<pre>// Example kernel with branch
+__global__ void branchExample(int *data, int N) {
+    int i = threadIdx.x;
+    if (data[i] > 100) {       // Branch point
+        data[i] = data[i] * 2;  // Taken path
+    } else {
+        data[i] = data[i] + 10; // Not-taken path
+    }
+    // Reconvergence point
+}
+</pre>
+        </div>
+
+        <p>
+            The PC logic must:
+        </p>
+        <ol>
+            <li>Evaluate the branch condition for all threads in the warp</li>
+            <li>Generate an <strong>active mask</strong> (which threads take which path)</li>
+            <li>Push divergence info onto a <strong>reconvergence stack</strong></li>
+            <li>Execute taken path with active mask</li>
+            <li>Execute not-taken path with inverted mask</li>
+            <li>Pop stack and reconverge</li>
+        </ol>
+
+        <div class="code-block">
+<pre>// Simplified PC logic with branch support
+module program_counter (
+    input clk,
+    input reset,
+    input branch_enable,        // Branch instruction active
+    input branch_condition,     // Branch taken?
+    input [31:0] branch_target, // Where to jump
+    output reg [31:0] pc        // Current program counter
+);
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            pc <= 32'h0;  // Start at address 0
+        end else if (branch_enable && branch_condition) begin
+            pc <= branch_target;  // Jump to target
+        end else begin
+            pc <= pc + 1;  // Sequential execution
+        end
+    end
+
+endmodule
+</pre>
+        </div>
+
+        <h2>4.5 Warp Scheduler</h2>
+
+        <h3>The Scheduler's Job</h3>
+
+        <p>
+            The <strong>warp scheduler</strong> is the GPU's traffic controller. Every cycle, it decides:
+        </p>
+        <ul>
+            <li>Which warp(s) to execute this cycle</li>
+            <li>Which execution unit to use (ALU, LSU, SFU)</li>
+            <li>Whether to issue an instruction or stall (waiting for memory, etc.)</li>
+        </ul>
+
+        <h3>Scheduling Policies</h3>
+
+        <p>
+            Common scheduling algorithms:
+        </p>
+
+        <ol>
+            <li><strong>Round-robin:</strong> Cycle through warps in order (simple, fair)</li>
+            <li><strong>Greedy-then-oldest (GTO):</strong> Issue same warp until it stalls, then pick oldest ready warp</li>
+            <li><strong>Two-level scheduling:</strong> Prioritize warps that are guaranteed to have data ready</li>
+        </ol>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+Warp Scheduler State Machine (Simplified):
+┌─────────────────────────────────────────────────────────────┐
+│ Warp Pool (e.g., 32 warps):                                 │
+│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐     │
+│ │Warp 0│ │Warp 1│ │Warp 2│ │Warp 3│ │ ...  │ │Warp31│     │
+│ │READY │ │STALL │ │READY │ │WAIT  │ │      │ │DONE  │     │
+│ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘     │
+└─────────────────────────────────────────────────────────────┘
+           │             │             │
+           ▼             ▼             ▼
+    ┌───────────┐ ┌────────────┐ ┌──────────┐
+    │  READY    │ │   STALL    │ │  WAIT    │
+    │ (can issue│ │ (data not  │ │ (memory  │
+    │  instr)   │ │  ready)    │ │  access) │
+    └───────────┘ └────────────┘ └──────────┘
+           │
+           ▼
+    ┌─────────────────────┐
+    │  Pick one warp      │
+    │  (round-robin or    │
+    │   priority-based)   │
+    └──────────┬──────────┘
+               │
+               ▼
+    ┌──────────────────────┐
+    │ Issue instruction to │
+    │   execution units    │
+    └──────────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.5: Warp scheduler decision process</div>
+        </div>
+
+        <h3>Scoreboarding</h3>
+
+        <p>
+            To track dependencies, the scheduler uses a <strong>scoreboard</strong>:
+        </p>
+        <ul>
+            <li>Each register has a "pending write" bit</li>
+            <li>When instruction reads a register, check if it's ready</li>
+            <li>If not ready, mark warp as stalled</li>
+            <li>When write completes, clear the bit and wake up waiting warps</li>
+        </ul>
+
+        <div class="code-block">
+<pre>// Conceptual scoreboard
+struct Scoreboard {
+    bool pending[NUM_REGISTERS];  // Is register being written?
+    int  writer_warp[NUM_REGISTERS]; // Which warp is writing?
+    
+    bool can_issue(Instruction inst, int warp_id) {
+        // Check if source registers are ready
+        if (pending[inst.src1] || pending[inst.src2]) {
+            return false;  // Dependency, must stall
+        }
+        return true;
+    }
+    
+    void mark_pending(int reg, int warp_id) {
+        pending[reg] = true;
+        writer_warp[reg] = warp_id;
+    }
+    
+    void clear_pending(int reg) {
+        pending[reg] = false;
+    }
+};
+</pre>
+        </div>
+
+        <h2>4.6 Load/Store Unit (LSU)</h2>
+
+        <h3>Memory Access Challenges</h3>
+
+        <p>
+            The LSU handles all memory operations:
+        </p>
+        <ul>
+            <li>Loads: Read from global memory, shared memory, or cache</li>
+            <li>Stores: Write to global memory or shared memory</li>
+            <li>Atomics: Read-modify-write operations</li>
+        </ul>
+
+        <p>
+            Key challenges:
+        </p>
+        <ul>
+            <li><strong>Latency:</strong> Global memory access takes 200-400 cycles!</li>
+            <li><strong>Coalescing:</strong> Combine multiple thread accesses into fewer transactions</li>
+            <li><strong>Bank conflicts:</strong> Avoid multiple threads hitting the same memory bank</li>
+            <li><strong>Caching:</strong> L1/L2 caches reduce latency for hot data</li>
+        </ul>
+
+        <h3>Memory Coalescing</h3>
+
+        <p>
+            When threads in a warp access consecutive addresses, the LSU <strong>coalesces</strong> them:
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+Good (Coalesced) Access Pattern:
+Thread 0: Load A[0]  ┐
+Thread 1: Load A[1]  │
+Thread 2: Load A[2]  ├─ One 128-byte memory transaction
+Thread 3: Load A[3]  │
+...                  │
+Thread 31: Load A[31]┘
+
+Bad (Non-Coalesced) Pattern:
+Thread 0: Load A[0]   → Transaction 1 (128 bytes, only use 4 bytes)
+Thread 1: Load A[128] → Transaction 2 (128 bytes, only use 4 bytes)
+Thread 2: Load A[256] → Transaction 3 ...
+...
+Thread 31: Load A[3968] → 32 transactions instead of 1!  (32× slower)
+            </pre>
+            <div class="figure-caption">Figure 4.6: Coalesced vs non-coalesced memory access</div>
+        </div>
+
+        <h3>LSU Pipeline</h3>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+Load/Store Unit Pipeline:
+┌──────────────────────────────────────────────────────────┐
+│ Stage 1: Address Generation                              │
+│  - Compute effective address for each thread             │
+│  - Base + Offset calculation                             │
+└──────────────┬───────────────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────────────┐
+│ Stage 2: Coalescing                                      │
+│  - Analyze access pattern                                │
+│  - Merge adjacent addresses into transactions            │
+└──────────────┬───────────────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────────────┐
+│ Stage 3: Cache Lookup / Memory Request                   │
+│  - Check L1 cache                                        │
+│  - On miss, send request to L2 / global memory           │
+└──────────────┬───────────────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────────────┐
+│ Stage 4: Wait for Data                                   │
+│  - Warp stalls until data arrives                        │
+│  - Scheduler issues other warps                          │
+└──────────────┬───────────────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────────────┐
+│ Stage 5: Writeback to Registers                          │
+│  - Distribute loaded data to thread registers            │
+│  - Mark warp as ready                                    │
+└──────────────────────────────────────────────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.7: LSU pipeline stages</div>
+        </div>
+
+        <div class="code-block">
+<pre>// Simplified LSU address generator
+module lsu_address_gen (
+    input [31:0] base_addr,      // Base address (from register)
+    input [31:0] offset,         // Offset (immediate or register)
+    input [4:0] thread_id,       // Which thread in warp
+    output [31:0] effective_addr // Final address
+);
+
+    assign effective_addr = base_addr + offset + (thread_id * 4);
+    // For array[threadIdx.x], this computes:
+    // effective_addr = &array + threadIdx.x * sizeof(element)
+
+endmodule
+</pre>
+        </div>
+
+        <h2>4.7 Execution Pipeline and Datapath</h2>
+
+        <h3>The Classic Pipeline Stages</h3>
+
+        <p>
+            Like CPUs, GPUs use pipelined execution. A typical GPU pipeline:
+        </p>
+
+        <ol>
+            <li><strong>Fetch (F):</strong> Read instruction from I-cache using PC</li>
+            <li><strong>Decode (D):</strong> Decode opcode, identify registers</li>
+            <li><strong>Issue (I):</strong> Check scoreboard, schedule warp</li>
+            <li><strong>Read (R):</strong> Read operands from register file</li>
+            <li><strong>Execute (E):</strong> ALU/LSU/SFU operation</li>
+            <li><strong>Memory (M):</strong> Cache access (for loads/stores)</li>
+            <li><strong>Writeback (W):</strong> Write result back to register file</li>
+        </ol>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+7-Stage Pipeline:
+┌────┬────┬────┬────┬────┬────┬────┐
+│ F  │ D  │ I  │ R  │ E  │ M  │ W  │  ← Instruction 1 (Warp 0)
+└────┴────┴────┴────┴────┴────┴────┘
+     ┌────┬────┬────┬────┬────┬────┬────┐
+     │ F  │ D  │ I  │ R  │ E  │ M  │ W  │  ← Instruction 2 (Warp 1)
+     └────┴────┴────┴────┴────┴────┴────┘
+          ┌────┬────┬────┬────┬────┬────┬────┐
+          │ F  │ D  │ I  │ R  │ E  │ M  │ W  │  ← Instruction 3 (Warp 2)
+          └────┴────┴────┴────┴────┴────┴────┘
+
+Cycle:   1    2    3    4    5    6    7    8    9    10
+         Each stage processes one warp per cycle
+            </pre>
+            <div class="figure-caption">Figure 4.8: Pipelined execution (different warps)</div>
+        </div>
+
+        <h3>Datapath Diagram</h3>
+
+        <p>
+            The <strong>datapath</strong> shows how data flows through the pipeline:
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 10px;">
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          GPU Core Datapath                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌────────┐    ┌─────────┐    ┌──────────┐    ┌──────────────────┐     │
+│  │   PC   │───▶│ I-Cache │───▶│ Decoder  │───▶│  Warp Scheduler  │     │
+│  └────────┘    └─────────┘    └──────────┘    └─────────┬────────┘     │
+│      ▲                                                    │              │
+│      │                                              Issue │              │
+│      │                                                    ▼              │
+│      │         ┌──────────────────────────────────────────────┐         │
+│      │         │         Register File (65K regs)             │         │
+│      │         └──────┬───────────────────────────┬───────────┘         │
+│      │                │ Src A      Src B          │ Dest                │
+│      │                ▼            ▼              │                     │
+│      │         ┌──────────┐  ┌──────────┐        │                     │
+│      │         │  Operand │  │  Operand │        │                     │
+│      │         │    A     │  │    B     │        │                     │
+│      │         └─────┬────┘  └─────┬────┘        │                     │
+│      │               │             │              │                     │
+│      │               └──────┬──────┘              │                     │
+│      │                      ▼                     │                     │
+│      │               ┌──────────────┐             │                     │
+│      │               │     ALU      │             │                     │
+│      │               │  (32-wide)   │             │                     │
+│      │               └──────┬───────┘             │                     │
+│      │                      │ Result              │                     │
+│      │                      └─────────────────────┘                     │
+│      │                                                                  │
+│      │  ┌──────────────┐                                               │
+│      └──│ Branch Logic │ (updates PC if branch taken)                  │
+│         └──────────────┘                                               │
+└──────────────────────────────────────────────────────────────────────────┘
+            </pre>
+            <div class="figure-caption">Figure 4.9: Datapath showing data flow</div>
+        </div>
+
+        <h2>4.8 Control Signals and FSMs</h2>
+
+        <h3>Control vs Datapath</h3>
+
+        <p>
+            Every hardware component has two parts:
+        </p>
+        <ul>
+            <li><strong>Datapath:</strong> The "what" — ALUs, registers, wires that move data</li>
+            <li><strong>Control:</strong> The "when" — FSMs, decoders, enable signals that orchestrate the datapath</li>
+        </ul>
+
+        <h3>Example: Warp Scheduler FSM</h3>
+
+        <div class="code-block">
+<pre>// Simplified warp scheduler state machine
+module warp_scheduler (
+    input clk,
+    input reset,
+    input [31:0] warp_ready_mask,  // Which warps are ready
+    output reg [4:0] selected_warp,
+    output reg issue_enable
+);
+
+    typedef enum {IDLE, SELECT_WARP, ISSUE, WAIT} state_t;
+    state_t state, next_state;
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            state <= IDLE;
+        else
+            state <= next_state;
+    end
+    
+    always @(*) begin
+        next_state = state;
+        issue_enable = 0;
+        
+        case (state)
+            IDLE: begin
+                if (|warp_ready_mask)  // Any warp ready?
+                    next_state = SELECT_WARP;
+            end
+            
+            SELECT_WARP: begin
+                // Find first ready warp (priority encoder)
+                selected_warp = find_first_set(warp_ready_mask);
+                next_state = ISSUE;
+            end
+            
+            ISSUE: begin
+                issue_enable = 1;  // Pulse to execution units
+                next_state = WAIT;
+            end
+            
+            WAIT: begin
+                // Wait one cycle for pipeline
+                next_state = IDLE;
+            end
+        endcase
+    end
+
+endmodule
+</pre>
+        </div>
+
+        <h3>Control Signal Example: Instruction Decoder</h3>
+
+        <div class="code-block">
+<pre>// Decode instruction and generate control signals
+module decoder (
+    input [15:0] instruction,  // 16-bit instruction word
+    output reg alu_enable,
+    output reg lsu_enable,
+    output reg [3:0] alu_op,
+    output reg mem_read,
+    output reg mem_write,
+    output reg reg_write
+);
+
+    wire [3:0] opcode = instruction[15:12];
+    
+    always @(*) begin
+        // Default: all disabled
+        alu_enable = 0;
+        lsu_enable = 0;
+        mem_read = 0;
+        mem_write = 0;
+        reg_write = 0;
+        
+        case (opcode)
+            4'b0000: begin  // ADD
+                alu_enable = 1;
+                alu_op = 4'b0000;
+                reg_write = 1;
+            end
+            
+            4'b0001: begin  // SUB
+                alu_enable = 1;
+                alu_op = 4'b0001;
+                reg_write = 1;
+            end
+            
+            4'b1000: begin  // LOAD
+                lsu_enable = 1;
+                mem_read = 1;
+                reg_write = 1;
+            end
+            
+            4'b1001: begin  // STORE
+                lsu_enable = 1;
+                mem_write = 1;
+            end
+            
+            // ... more opcodes
+        endcase
+    end
+
+endmodule
+</pre>
+        </div>
+
+        <h2>4.9 Putting It All Together</h2>
+
+        <h3>Execution Flow Example</h3>
+
+        <p>
+            Let's trace a simple instruction through the pipeline:
+        </p>
+
+        <div class="code-block">
+<pre>// Kernel code:
+c[i] = a[i] + b[i];
+
+// Compiles to (simplified assembly):
+LOAD  R1, a[threadIdx]   // R1 = a[i]
+LOAD  R2, b[threadIdx]   // R2 = b[i]
+ADD   R3, R1, R2         // R3 = R1 + R2
+STORE c[threadIdx], R3   // c[i] = R3
+</pre>
+        </div>
+
+        <p>
+            Execution trace for Warp 0:
+        </p>
+
+        <div class="figure">
+            <pre style="font-family: monospace; font-size: 11px;">
+Cycle 1: LOAD R1, a[threadIdx]
+  - Fetch: Read instruction from I-cache
+  - Decode: Identify LOAD opcode, dest=R1
+  - Issue: Check scoreboard → OK, issue to LSU
+  - Execute: LSU computes addresses for 32 threads
+  - Memory: Send coalesced read request to L1 cache
+  - Stall: Warp 0 waits for data (200 cycles)
+  
+  → Scheduler switches to Warp 1 (latency hiding!)
+
+Cycle 201: Data arrives for Warp 0
+  - Writeback: Store loaded data into R1 for all 32 threads
+  - Warp 0 now ready again
+
+Cycle 202: LOAD R2, b[threadIdx]
+  - Same as above...
+
+Cycle 403: ADD R3, R1, R2
+  - Fetch: Read instruction
+  - Decode: ADD opcode, src1=R1, src2=R2, dest=R3
+  - Issue: Scoreboard check → R1 and R2 ready
+  - Read: Get R1[0..31], R2[0..31] from register file
+  - Execute: 32 ALUs perform addition in parallel
+  - Writeback: Store results in R3[0..31]
+  - Duration: 1 cycle (no memory latency!)
+
+Cycle 404: STORE c[threadIdx], R3
+  - Similar to LOAD, but writes to memory
+            </pre>
+            <div class="figure-caption">Figure 4.10: Execution trace for vector addition</div>
+        </div>
+
+        <h3>Key Insights</h3>
+
+        <ul>
+            <li><strong>Memory operations dominate latency</strong> (200+ cycles vs 1 cycle for ALU)</li>
+            <li><strong>Latency hiding through warp switching</strong> (scheduler issues other warps while waiting)</li>
+            <li><strong>SIMD parallelism</strong> (32 ALUs execute simultaneously)</li>
+            <li><strong>Register file bandwidth</strong> (must read/write 64 values for 2-operand instruction)</li>
+        </ul>
+
+        <h2>4.10 Chapter Summary</h2>
+
+        <p>
+            In this chapter, we explored the core components of a GPU:
+        </p>
+
+        <ul>
+            <li><strong>ALU:</strong> Arithmetic/logic engine, FP32/FP64/INT variants, pipelined for throughput</li>
+            <li><strong>Register File:</strong> Massive (65K+ registers), multi-ported, dynamically allocated</li>
+            <li><strong>Program Counter:</strong> Per-warp PC, branch handling, reconvergence stack</li>
+            <li><strong>Warp Scheduler:</strong> Traffic controller, round-robin or priority-based, scoreboarding</li>
+            <li><strong>Load/Store Unit:</strong> Memory access, coalescing, cache interface</li>
+            <li><strong>Pipeline:</strong> Fetch → Decode → Issue → Read → Execute → Memory → Writeback</li>
+            <li><strong>Datapath:</strong> Wires and registers that move data</li>
+            <li><strong>Control:</strong> FSMs and decoders that orchestrate execution</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Next Steps:</strong> In Chapter 5, we'll design a complete Instruction Set Architecture (ISA) 
+            for our GPU. We'll define instruction formats, encoding, and semantics that the hardware will implement.
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 4.1:</strong> Calculate register file size: If your GPU has 32 warps, warp size 32, 
+            and each thread uses 24 registers, how many total 32-bit registers do you need?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 4.2:</strong> Design a simple 2-operand ALU that supports ADD, SUB, AND, OR, XOR. 
+            Draw the block diagram and write pseudo-Verilog.
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 4.3:</strong> Analyze memory coalescing: Given these access patterns, how many 
+            128-byte transactions are needed?
+            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px;">
+Pattern A: Thread i accesses A[i]
+Pattern B: Thread i accesses A[i * 2]
+Pattern C: Thread i accesses A[random()]</pre>
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 4.4:</strong> Implement a round-robin warp scheduler in Verilog. It should cycle 
+            through 8 warps, issuing one instruction per cycle.
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 4.5:</strong> Calculate occupancy: Your kernel uses 32 registers/thread, 16 KB 
+            shared memory/block, and 256 threads/block. The SM has 65,536 registers and 48 KB shared memory. 
+            How many blocks can run simultaneously? What's the limiting factor?
+        </div>
+
+        <h2>Further Reading</h2>
+        <ul>
+            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#hardware-implementation" target="_blank">NVIDIA CUDA Guide: Hardware Implementation</a></li>
+            <li>Paper: "Decoupled Supply-Compute Communication for Heterogeneous Architectures" (micro-architecture details)</li>
+            <li>"Computer Architecture: A Quantitative Approach" — Chapter on GPUs and throughput processors</li>
+            <li><a href="https://github.com/adam-maj/tiny-gpu" target="_blank">tiny-gpu repository</a> — See `src/alu.sv`, `src/registers.sv`, `src/scheduler.sv`</li>
+            <li>Paper: "A Detailed GPU Cache Model Based on Reuse Distance Theory" (cache behavior analysis)</li>
+        </ul>
+
+        <div class="chapter-nav">
+            <a href="chapter-03.html">← Previous: Parallel Execution</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-05.html">Next: ISA Design →</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 6: Pipeline Design and Control Flow | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 850px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
+        .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; overflow-x: auto; }
+        .figure-caption { font-style: italic; color: var(--muted); margin: 10px 0 0 0; text-align: center; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        pre { font-size: 12px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div class="chapter-nav">
+            <a href="chapter-05.html">← Previous: ISA Design</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-07.html">Next: Memory Hierarchy →</a>
+        </div>
+
+        <h1>Chapter 6: Pipeline Design and Control Flow</h1>
+        
+        <div class="meta" style="color: var(--muted); margin: 20px 0;">
+            <span>Part II: Execution & Scheduling</span> • 
+            <span>Reading time: ~70 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            In Chapter 4, we looked at GPU components in isolation. In Chapter 5, we designed an ISA. 
+            Now we bring them together: the <strong>pipeline</strong> is the orchestration that turns 
+            individual components into a functional system.
+        </p>
+
+        <p>
+            A pipeline is like an assembly line in a factory. Instead of completing one instruction 
+            from start to finish before starting the next, we break each instruction into stages. While one 
+            instruction is in the "Execute" stage, another is in "Memory" stage, and a third is in "Writeback". 
+            This parallelism increases throughput dramatically.
+        </p>
+
+        <p>
+            In this chapter, we'll design a 7-stage GPU pipeline, analyze hazards that slow it down, 
+            and implement mechanisms to handle them efficiently.
+        </p>
+
+        <h2>6.1 The Basic Fetch-Execute Cycle</h2>
+
+        <p>
+            Before pipelining, execution is simple but slow:
+        </p>
+
+        <div class="figure">
+            <pre>Unpipelined Execution:
+Cycle 1: Fetch instruction 1
+Cycle 2: Decode instruction 1
+Cycle 3: Execute instruction 1
+Cycle 4: Memory operation for instruction 1
+Cycle 5: Writeback result of instruction 1
+Cycle 6: Fetch instruction 2
+Cycle 7: Decode instruction 2
+...
+Total for 5 instructions: 25 cycles</pre>
+            <div class="figure-caption">Figure 6.1: Unpipelined execution</div>
+        </div>
+
+        <p>
+            With pipelining, all stages work simultaneously:
+        </p>
+
+        <div class="figure">
+            <pre>Pipelined Execution (5-stage, overlapped):
+Cycle: 1   2   3   4   5   6   7   8   9
+       ┌───┐
+Instr1 │ F │ D │ E │ M │ W │
+       └───┴───┴───┴───┴───┘
+           ┌───┐
+Instr2     │ F │ D │ E │ M │ W │
+           └───┴───┴───┴───┴───┘
+               ┌───┐
+Instr3         │ F │ D │ E │ M │ W │
+               └───┴───┴───┴───┴───┘
+                   ┌───┐
+Instr4             │ F │ D │ E │ M │ W │
+                   └───┴───┴───┴───┴───┘
+                       ┌───┐
+Instr5                 │ F │ D │ E │ M │ W │
+                       └───┴───┴───┴───┴───┘
+
+5 instructions finish in 9 cycles (instead of 25)
+Throughput: 5/9 ≈ 0.56 instr/cycle vs 0.2 instr/cycle unpipelined!</pre>
+            <div class="figure-caption">Figure 6.2: Pipelined execution</div>
+        </div>
+
+        <h2>6.2 The 7-Stage GPU Pipeline</h2>
+
+        <h3>Stage Breakdown</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Stage</th>
+                    <th>Abbreviation</th>
+                    <th>Description</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Fetch</strong></td>
+                    <td>F</td>
+                    <td>Read instruction from I-cache using PC</td>
+                    <td>1 cycle (cache hit)</td>
+                </tr>
+                <tr>
+                    <td><strong>Decode</strong></td>
+                    <td>D</td>
+                    <td>Parse opcode, identify registers, generate control signals</td>
+                    <td>1 cycle</td>
+                </tr>
+                <tr>
+                    <td><strong>Issue</strong></td>
+                    <td>I</td>
+                    <td>Check scoreboard, allocate resources, schedule execution</td>
+                    <td>1 cycle</td>
+                </tr>
+                <tr>
+                    <td><strong>Read</strong></td>
+                    <td>R</td>
+                    <td>Read operands from register file</td>
+                    <td>1 cycle</td>
+                </tr>
+                <tr>
+                    <td><strong>Execute</strong></td>
+                    <td>E</td>
+                    <td>ALU operation, address computation, branch evaluation</td>
+                    <td>1 cycle (may be multiple for MUL)</td>
+                </tr>
+                <tr>
+                    <td><strong>Memory</strong></td>
+                    <td>M</td>
+                    <td>Cache access (L1/L2), or main memory request</td>
+                    <td>1 cycle (cache) to 200+ (DRAM)</td>
+                </tr>
+                <tr>
+                    <td><strong>Writeback</strong></td>
+                    <td>W</td>
+                    <td>Write result back to register file</td>
+                    <td>1 cycle</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Detailed Pipeline Diagram</h3>
+
+        <div class="figure">
+            <pre>7-Stage GPU Pipeline:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         PC (Program Counter)                    │
+│                      Warp[0..31].pc[31:0]                       │
+└──────┬────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 1: FETCH                             │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ I-Cache                                         │ │
+│  │ (Instruction Cache, 8-32 KB)                   │ │
+│  │ Output: 32-bit instruction word                │ │
+│  └─────────────────────────────────────────────────┘ │
+│                      │                                │
+│                      ▼                                │
+│           ┌──────────────────────┐                   │
+│           │  F Stage Register    │                   │
+│           │  (Instruction + PC)  │                   │
+│           └──────────────────────┘                   │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 2: DECODE                            │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Decoder Module                                  │ │
+│  │ - Extract opcode[15:12]                         │ │
+│  │ - Extract dst[11:8]                             │ │
+│  │ - Extract src1[7:4]                             │ │
+│  │ - Extract src2[3:0]                             │ │
+│  │ - Generate control signals:                     │ │
+│  │   alu_enable, lsu_enable, branch_enable, etc   │ │
+│  └─────────────────────────────────────────────────┘ │
+│                      │                                │
+│                      ▼                                │
+│           ┌──────────────────────┐                   │
+│           │  D Stage Register    │                   │
+│           │  (Control Signals)   │                   │
+│           └──────────────────────┘                   │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 3: ISSUE                             │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Scoreboard (Dependency Check)                   │ │
+│  │ - Check if source registers are ready          │ │
+│  │ - If not ready: STALL warp (block pipeline)    │ │
+│  │ - If ready: Allow instruction to proceed       │ │
+│  │ - Mark destination register as pending         │ │
+│  └─────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Warp Scheduler                                  │ │
+│  │ - Select which warp to execute                 │ │
+│  │ - May stall all warps if memory subsystem busy │ │
+│  └─────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 4: READ                              │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Register File (Multi-ported)                    │ │
+│  │ - Read src1 (operand A)                         │ │
+│  │ - Read src2 (operand B)                         │ │
+│  │ Parallel reads for all 32 threads in warp      │ │
+│  │                                                 │ │
+│  │ Output: 32x32-bit values for each operand      │ │
+│  └─────────────────────────────────────────────────┘ │
+│                      │                                │
+│                      ▼                                │
+│           ┌──────────────────────┐                   │
+│           │  R Stage Register    │                   │
+│           │  (Operand Values)    │                   │
+│           └──────────────────────┘                   │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 5: EXECUTE                           │
+│  ┌──────────────────────────────────────────────────┐│
+│  │              ALU Array (32-wide)                 ││
+│  │  ┌─────┐ ┌─────┐ ┌─────┐ ... ┌─────┐           ││
+│  │  │ ALU │ │ ALU │ │ ALU │     │ ALU │           ││
+│  │  │  0  │ │  1  │ │  2  │     │  31 │           ││
+│  │  └─────┘ └─────┘ └─────┘ ... └─────┘           ││
+│  │                                                  ││
+│  │  Each ALU executes same operation on different  ││
+│  │  data (SIMD parallelism within warp)            ││
+│  └──────────────────────────────────────────────────┘│
+│  Also:                                              │
+│  - Branch Evaluation Unit                          │
+│  - Address Computation (for LOAD/STORE)            │
+│  - Special Function Unit (SFU) for sin/cos/etc    │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 6: MEMORY                            │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Load/Store Unit (LSU)                           │ │
+│  │ - Coalesce addresses                            │ │
+│  │ - Generate memory transaction                   │ │
+│  ├─────────────────────────────────────────────────┤ │
+│  │ L1 Cache (128 KB)                               │ │
+│  │ - Fast (20-40 cycles)                           │ │
+│  │ - Lookup and response                           │ │
+│  ├─────────────────────────────────────────────────┤ │
+│  │ L2 Cache Interface (if L1 miss)                 │ │
+│  │ - Slower (100-200 cycles)                       │ │
+│  ├─────────────────────────────────────────────────┤ │
+│  │ Memory Controller (if L2 miss)                  │ │
+│  │ - Main DRAM access (200-400 cycles)             │ │
+│  └─────────────────────────────────────────────────┘ │
+│  NOTE: Warp stalls here during cache miss!          │
+└──────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│           STAGE 7: WRITEBACK                         │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ Result Distributor                              │ │
+│  │ - For each thread (32), distribute result       │ │
+│  │ - Allocate to destination register              │ │
+│  │ - Clear "pending write" bit in scoreboard      │ │
+│  │ - Wake up any warps waiting on this register   │ │
+│  └─────────────────────────────────────────────────┘ │
+│                      │                                │
+│                      ▼                                │
+│           ┌──────────────────────┐                   │
+│           │  Register File       │                   │
+│           │  (Writeback Port)    │                   │
+│           └──────────────────────┘                   │
+└──────────────────────────────────────────────────────┘</pre>
+            <div class="figure-caption">Figure 6.3: Detailed 7-stage pipeline</div>
+        </div>
+
+        <h2>6.3 Pipeline Hazards</h2>
+
+        <p>
+            Hazards are situations where instructions cannot proceed normally. There are three types:
+        </p>
+
+        <h3>Data Hazards (Read-After-Write)</h3>
+
+        <p>
+            An instruction needs data that hasn't been written yet:
+        </p>
+
+        <div class="code-block">
+<pre>ADD R1, R2, R3    // Instruction 1: R1 = R2 + R3
+SUB R4, R1, R5    // Instruction 2: R4 = R1 - R5  (needs R1!)
+                  // ^^^ HAZARD! R1 won't be available until cycle 5</pre>
+        </div>
+
+        <div class="figure">
+            <pre>Timeline:
+Cycle: 1   2   3   4   5   6   7   8
+       ┌───┐
+ADD    │ F │ D │ I │ R │ E │ M │ W │  R1 written in cycle 5
+       └───┴───┴───┴───┴───┴───┴───┘
+           ┌───┐
+SUB        │ F │ D │ I │ R? │ (stall)
+           └───┴───┴───┴───┴───────
+                           ^ R1 not ready, must stall SUB
+
+Option 1: STALL SUB until R1 is ready (cycle 5)
+Cycle: 1   2   3   4   5   6   7   8   9   10
+       ┌───┐
+ADD    │ F │ D │ I │ R │ E │ M │ W │
+       └───┴───┴───┴───┴───┴───┴───┘
+           ┌───┬───┬───┬───┬───┐
+SUB        │ F │ D │ I │ - │ - │ R │ E │ M │ W │
+           └───┴───┴───┴───┴───┴───┴───┴───┴───┘
+                        ^ ^ Bubble: wasted cycles
+
+Option 2: FORWARDING (faster!)
+Cycle: 1   2   3   4   5   6   7   8
+       ┌───┐
+ADD    │ F │ D │ I │ R │ E │ M │ W │
+       └───┴───┴───┴───┴───┴───┴───┘
+                       │
+                       └──▶ Forward E stage result
+                            to R stage of SUB
+           ┌───┐
+SUB        │ F │ D │ I │ R*│ E │ M │ W │
+           └───┴───┴───┴───┴───┴───┴───┘
+                       ^ Receives forwarded value instead of waiting
+No stall needed!</pre>
+            <div class="figure-caption">Figure 6.4: Data hazard resolution</div>
+        </div>
+
+        <h3>Data Hazard Detection</h3>
+
+        <p>
+            The scoreboard tracks which registers have pending writes:
+        </p>
+
+        <div class="code-block">
+<pre>module hazard_detector (
+    input [3:0] src1, src2,           // Source registers from decode
+    input [15:0] pending_writes,      // Bit i = is register i pending?
+    output reg hazard                 // Is there a hazard?
+);
+
+    always @(*) begin
+        hazard = (pending_writes[src1] || pending_writes[src2]);
+        // If either source register is pending, there's a hazard
+    end
+endmodule</pre>
+        </div>
+
+        <h3>Forwarding (Operand Bypass)</h3>
+
+        <p>
+            Instead of stalling, forward results from later stages:
+        </p>
+
+        <div class="code-block">
+<pre>module forwarding_logic (
+    input [31:0] execute_result,      // Result from E stage
+    input [31:0] memory_result,       // Result from M stage
+    input [3:0] src_reg,              // Source register we need
+    input [3:0] execute_dst,          // Dest of E stage instruction
+    input [3:0] memory_dst,           // Dest of M stage instruction
+    output reg [31:0] operand         // Forwarded value
+);
+
+    always @(*) begin
+        if (execute_dst == src_reg && execute_dst != 0) begin
+            // Forward from E stage (shortest path)
+            operand = execute_result;
+        end else if (memory_dst == src_reg && memory_dst != 0) begin
+            // Forward from M stage
+            operand = memory_result;
+        end else begin
+            // No forwarding available, use register file value
+            operand = register_file[src_reg];
+        end
+    end
+endmodule</pre>
+        </div>
+
+        <h3>Control Hazards (Branches)</h3>
+
+        <p>
+            When the pipeline fetches the next instruction before knowing if a branch is taken:
+        </p>
+
+        <div class="code-block">
+<pre>BRnzp 1,0,1, 10  // Branch to PC+10 if N or P flag set
+ADD   R1, R2, R3 // What if branch is taken?
+...             // Instructions 3-9 might be wasted!</pre>
+        </div>
+
+        <div class="figure">
+            <pre>Without Branch Prediction:
+Cycle: 1   2   3   4   5   6   7   8   9   10
+       ┌───┐
+BR     │ F │ D │ I │ R │ E │ M │ W │       (decides branch at cycle 5)
+       └───┴───┴───┴───┴───┴───┴───┘
+           ┌───┐
+ADD        │ F │ D │ I │ R │ E │ (killed)  (wasted if branch taken)
+           └───┴───┴───┴───┴───┘
+               ┌───┐
+Instr3         │ F │ D │ (killed)
+               └───┴───┴
+                   
+If branch IS taken: Instructions 2-3 are flushed (wasted cycles)
+Pipeline bubble = 3-4 cycles!
+
+With Static Branch Prediction (predict "not taken"):
+If prediction correct: No penalty
+If prediction wrong: Flush pipeline and restart from branch target</pre>
+            <div class="figure-caption">Figure 6.5: Control hazard (branch)</div>
+        </div>
+
+        <h3>Structural Hazards</h3>
+
+        <p>
+            When multiple instructions need the same hardware resource:
+        </p>
+
+        <ul>
+            <li><strong>Register file port conflict:</strong> Two warps try to write at the same time</li>
+            <li><strong>Memory system contention:</strong> Multiple warps accessing L1 cache simultaneously</li>
+            <li><strong>ALU resource conflict:</strong> More instructions than available ALUs</li>
+        </ul>
+
+        <p>
+            Resolution:
+        </p>
+        <ul>
+            <li><strong>Duplicate resources:</strong> Multiple register file ports, multiple ALUs (cost: area/power)</li>
+            <li><strong>Stall:</strong> Hold instructions until resource is free (cost: performance)</li>
+            <li><strong>Scheduling:</strong> Warp scheduler avoids conflicts by choosing different warps</li>
+        </ul>
+
+        <h2>6.4 Branch Handling and Reconvergence</h2>
+
+        <h3>The Challenge: Thread Divergence</h3>
+
+        <p>
+            Recall from Chapter 3: threads in a warp can diverge. The hardware must track divergence points 
+            and reconvergence points:
+        </p>
+
+        <div class="code-block">
+<pre>// Kernel code with branch
+if (threadIdx.x < 16) {
+    expensiveComputation();
+} else {
+    simpleComputation();
+}
+// Reconvergence point: both paths meet here</pre>
+        </div>
+
+        <h3>The Reconvergence Stack</h3>
+
+        <p>
+            Each warp maintains a stack of divergence points:
+        </p>
+
+        <div class="figure">
+            <pre>Reconvergence Stack (per warp):
+
+Initial state:
+┌─────────────────────────────┐
+│ PC:  0x100 (entry point)    │
+│ Mask: 0xFFFFFFFF (all active)
+└─────────────────────────────┘
+
+At branch (BRnzp):
+1. Evaluate condition for all 32 threads
+2. Create active mask:
+   Threads 0-15: condition true
+   Threads 16-31: condition false
+
+Stack after divergence:
+┌─────────────────────────────────────────┐
+│ Entry 1 (top):                          │
+│   PC: 0x110 (reconvergence point)       │
+│   Taken Mask: 0x0000FFFF (threads 0-15)│
+│   Not-taken Mask: 0xFFFF0000            │
+│   PC of not-taken: 0x105                │
+├─────────────────────────────────────────┤
+│ Entry 0:                                │
+│   PC: 0x100 (entry point)               │
+│   Mask: 0xFFFFFFFF                      │
+└─────────────────────────────────────────┘
+
+Execution:
+Cycle 1-N: Execute taken path with 0x0000FFFF mask
+           (threads 16-31 inactive)
+Cycle N+1-M: Execute not-taken path with 0xFFFF0000 mask
+             (threads 0-15 inactive)
+Cycle M+1: Pop stack, restore mask 0xFFFFFFFF
+           Both paths reconverged at 0x110</pre>
+            <div class="figure-caption">Figure 6.6: Reconvergence stack operation</div>
+        </div>
+
+        <h3>Reconvergence Stack Implementation</h3>
+
+        <div class="code-block">
+<pre>typedef struct {
+    logic [31:0] pc;              // Reconvergence address
+    logic [31:0] taken_mask;      // Active threads for taken path
+    logic [31:0] not_taken_mask;  // Active threads for not-taken
+    logic [31:0] not_taken_pc;    // Address of not-taken branch
+} ReconvergenceEntry;
+
+module reconvergence_stack #(
+    parameter DEPTH = 16  // Support up to 16 nested branches
+) (
+    input clk, reset,
+    input branch_detect,
+    input [31:0] condition_mask,
+    input [31:0] branch_target,
+    input [31:0] not_taken_addr,
+    input [31:0] reconverge_addr,
+    
+    output logic push_stack,
+    output logic pop_stack,
+    output logic [31:0] active_mask,
+    output logic [31:0] next_pc
+);
+
+    ReconvergenceEntry stack [DEPTH-1:0];
+    logic [$clog2(DEPTH)-1:0] sp;  // Stack pointer
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sp <= 0;
+            active_mask <= 32'hFFFFFFFF;
+        end else if (branch_detect) begin
+            // Push divergence point
+            stack[sp].pc <= reconverge_addr;
+            stack[sp].taken_mask <= condition_mask;
+            stack[sp].not_taken_mask <= ~condition_mask;
+            stack[sp].not_taken_pc <= not_taken_addr;
+            sp <= sp + 1;
+            active_mask <= condition_mask;  // Execute taken path
+        end else if (at_reconverge_addr) begin
+            // Pop and execute other path
+            if (|stack[sp-1].not_taken_mask) begin
+                active_mask <= stack[sp-1].not_taken_mask;
+                next_pc <= stack[sp-1].not_taken_pc;
+            end else begin
+                // Both paths done, pop stack
+                sp <= sp - 1;
+                active_mask <= 32'hFFFFFFFF;
+                next_pc <= stack[sp-1].pc;
+            end
+        end
+    end
+endmodule</pre>
+        </div>
+
+        <h2>6.5 Instruction Fetch Complications</h2>
+
+        <h3>I-Cache Misses</h3>
+
+        <p>
+            If the instruction isn't in cache, Fetch stage must stall:
+        </p>
+
+        <div class="figure">
+            <pre>I-Cache Miss Scenario:
+┌────────────────────────────────┐
+│ PC = 0x500 (not in I-cache)    │
+└────────────────────────────────┘
+       │
+       ▼
+┌────────────────────────────────┐
+│ 1. Request L2 cache            │
+│ 2. L2 hits, returns instr      │ (50 cycles)
+│ 3. Fill I-cache                │
+│ 4. Retry fetch at 0x500        │
+└────────────────────────────────┘
+
+Result: Fetch stage stalls for ~50 cycles
+       All downstream stages also stall
+       Other warps can proceed (latency hiding)</pre>
+            <div class="figure-caption">Figure 6.7: I-cache miss handling</div>
+        </div>
+
+        <h3>Multi-Warp Fetch</h3>
+
+        <p>
+            Modern GPUs can fetch from multiple warps simultaneously:
+        </p>
+
+        <div class="code-block">
+<pre>// Fetch stage logic with multiple warps
+module fetch_multiple_warps (
+    input clk,
+    input [31:0] pc_warp[31:0],    // PC of each warp
+    input [31:0] i_cache_data,      // Single I-cache output
+    input i_cache_hit,
+    
+    output reg [4:0] selected_warp,  // Which warp to fetch
+    output reg [31:0] next_pc_out,
+    output reg instr_valid
+);
+
+    logic [4:0] ready_warps;  // Bitmask of ready warps
+    
+    always @(*) begin
+        // Find a warp that's not stalled
+        // (has been issued to E/M/W stages)
+        for (int i = 0; i < 32; i++) begin
+            if (warp_ready[i]) begin
+                ready_warps[i] = 1;
+            end
+        end
+        
+        // Priority: rotate through ready warps
+        selected_warp = find_next_ready(ready_warps);
+        next_pc_out = pc_warp[selected_warp];
+        instr_valid = i_cache_hit;  // Valid only if cache hit
+    end
+endmodule</pre>
+        </div>
+
+        <h2>6.6 Synchronization Instructions (SYNC)</h2>
+
+        <p>
+            The SYNC instruction from Chapter 5 blocks all threads until they reach the same point:
+        </p>
+
+        <div class="code-block">
+<pre>// Pseudocode for SYNC
+__global__ void kernel() {
+    int local_sum = 0;
+    local_sum += my_value;
+    
+    __syncthreads();  // All threads wait here
+    
+    // All threads have reached this point
+    global_result += local_sum;
+}</pre>
+        </div>
+
+        <h3>SYNC Implementation</h3>
+
+        <div class="code-block">
+<pre>module sync_barrier (
+    input clk, reset,
+    input [31:0] thread_mask,     // Which threads are active
+    input sync_instr,             // SYNC instruction
+    output reg all_threads_here   // Are all threads at barrier?
+);
+
+    logic [31:0] sync_mask;  // Threads that reached SYNC
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sync_mask <= 32'h0;
+        end else if (sync_instr) begin
+            // Thread reached SYNC
+            sync_mask <= sync_mask | thread_mask;
+        end
+    end
+    
+    assign all_threads_here = (sync_mask == thread_mask);
+    // When true, allow threads to proceed past SYNC
+    
+    // Clear sync_mask after all threads pass
+    always @(posedge clk) begin
+        if (all_threads_here) begin
+            sync_mask <= 32'h0;
+        end
+    end
+endmodule</pre>
+        </div>
+
+        <h2>6.7 Pipeline Performance Analysis</h2>
+
+        <h3>Key Metrics</h3>
+
+        <p>
+            <strong>CPI (Cycles Per Instruction):</strong>
+        </p>
+
+        <div class="code-block">
+<pre>CPI = Total Cycles / Number of Instructions
+Ideal CPI = 1.0 (one instruction per cycle)
+Real CPI = 1.0 + (stall cycles / instructions)
+
+Examples:
+- No stalls: CPI = 1.0
+- 10% of instructions stall for 2 cycles: CPI = 1.2
+- 50% of instructions are memory (stall 100 cycles): CPI = 50+</pre>
+        </div>
+
+        <p>
+            <strong>Throughput:</strong>
+        </p>
+
+        <div class="code-block">
+<pre>Throughput = Instructions Per Cycle = 1 / CPI
+            = (Number of Instructions) / (Total Cycles)
+
+For 1000 instructions with CPI=1.5:
+Throughput = 1000 / 1500 = 0.67 instr/cycle</pre>
+        </div>
+
+        <h3>Performance Analysis Example</h3>
+
+        <p>
+            Consider this kernel:
+        </p>
+
+        <div class="code-block">
+<pre>// Simple loop
+for (int i = 0; i < 10; i++) {
+    sum += array[i];  // LOAD + ADD per iteration
+}
+
+// Compiled to:
+LOAD R1, R2, offset   // Load array[i]
+ADD  R3, R3, R1       // sum += array[i]
+ADD  R2, R2, 4        // array++
+SLT  R4, R2, end_addr // Check loop condition
+BRnzp 0,0,1, -2       // Branch back if not done
+
+Total instructions per iteration: 4</pre>
+        </div>
+
+        <p>
+            Performance timeline:
+        </p>
+
+        <div class="figure">
+            <pre>Cycle:  1    2    3    4    5    6    7    8    9   10  ...  40
+        ┌───┐
+LOAD    │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+        └───┴───┴───┴───┴───┴───┴───┘
+            ┌───┐
+ADD (1)     │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+            └───┴───┴───┴───┴───┴───┴───┘
+                ┌───┐
+ADD (2)         │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+                └───┴───┴───┴───┴───┴───┴───┘
+                    ┌───┐
+SLT                 │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+                    └───┴───┴───┴───┴───┴───┴───┘
+                        ┌───┐
+BRnzp                   │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+                        └───┴───┴───┴───┴───┴───┴───┘
+                            ┌───┐  (Next iteration)
+LOAD                        │ F  │ D  │ I  │ R  │ E  │ M  │ W  │
+                            └───┴───┴───┴───┴───┴───┴───┘
+
+LOAD latency: 30 cycles (DRAM access)
+While LOAD is waiting, other instructions proceed
+Then LOAD data must arrive before ADD can write
+
+Analysis:
+- Iteration 0: LOAD takes 30 cycles to complete
+- Iterations 1-9: Pipeline keeps working, but limited by LOAD latency
+- Total: ~33 cycles for 10 iterations
+- CPI ≈ 40 / 40 = 1.0 (if latency hidden by other warps)
+- OR CPI ≈ 30 (if single warp waits for LOAD)</pre>
+            <div class="figure-caption">Figure 6.8: Loop performance analysis</div>
+        </div>
+
+        <h2>6.8 Real GPU Pipeline Examples</h2>
+
+        <h3>NVIDIA RTX 4090 Pipeline</h3>
+
+        <ul>
+            <li><strong>Stages:</strong> 8-12 stages (proprietary design, not fully documented)</li>
+            <li><strong>Width:</strong> 128 FP32 operations per clock (4 SMs × 32-wide warps)</li>
+            <li><strong>Features:</strong> Aggressive out-of-order execution, massive register file (256KB per SM)</li>
+            <li><strong>Cache:</strong> 128KB L1 per SM, 12MB L2 shared</li>
+        </ul>
+
+        <h3>AMD MI250X Pipeline</h3>
+
+        <ul>
+            <li><strong>Stages:</strong> Simpler pipeline, more wavefront-friendly</li>
+            <li><strong>Width:</strong> 64-wide wavefronts (vs NVIDIA's 32-wide warps)</li>
+            <li><strong>Vector ALUs:</strong> 64 FP32 ALUs per CU</li>
+            <li><strong>Cache:</strong> 64KB LDS per CU, 16MB L2</li>
+        </ul>
+
+        <h2>6.9 Chapter Summary</h2>
+
+        <ul>
+            <li><strong>Pipeline stages:</strong> Fetch → Decode → Issue → Read → Execute → Memory → Writeback</li>
+            <li><strong>Hazards:</strong> Data, control, structural — each requires different solutions</li>
+            <li><strong>Forwarding:</strong> Bypass results to avoid stalls (critical for performance)</li>
+            <li><strong>Branch handling:</strong> Reconvergence stack tracks divergence/convergence</li>
+            <li><strong>SYNC:</strong> Block all threads until barrier reached</li>
+            <li><strong>Performance:</strong> CPI, throughput — measure pipeline efficiency</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Next Steps:</strong> In Chapter 7, we'll look at memory architecture — caches, bandwidth, 
+            and memory access optimization. The memory subsystem has the biggest impact on GPU performance!
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 6.1:</strong> Analyze this code for hazards:
+            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px;">
+ADD R1, R2, R3
+AND R4, R1, R5
+OR  R1, R6, R7
+XOR R8, R1, R9</pre>
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 6.2:</strong> Design a branch predictor that uses a simple 2-bit counter per branch. 
+            How would you integrate it into the pipeline?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 6.3:</strong> Calculate CPI for a kernel with:
+            - 1000 instructions
+            - 100 LOAD instructions (take 200 cycles each)
+            - Assume perfect latency hiding among 8 warps
+        </div>
+
+        <h2>Further Reading</h2>
+        <ul>
+            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html" target="_blank">NVIDIA CUDA Programming Guide</a></li>
+            <li>"Computer Architecture: A Quantitative Approach" — Pipeline design chapter</li>
+            <li>Paper: "Understanding Latency Hiding on GPUs" (various GPU optimization studies)</li>
+            <li><a href="https://github.com/adam-maj/tiny-gpu/blob/master/src/scheduler.sv" target="_blank">tiny-gpu scheduler.sv</a> — Real implementation</li>
+        </ul>
+
+        <div class="chapter-nav">
+            <a href="chapter-05.html">← Previous: ISA Design</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-07.html">Next: Memory Hierarchy →</a>
+        </div>
+    </div>
+</body>
+</html>

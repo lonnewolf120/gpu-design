@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 1: Big Picture - What is a GPU? | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
+        .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; }
+        .figure-caption { font-style: italic; color: var(--muted); margin-top: 10px; text-align: center; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div class="chapter-nav">
+            <a href="../index.html">← Table of Contents</a>
+            <a href="chapter-02.html">Next: GPU vs CPU →</a>
+        </div>
+
+        <h1>Chapter 1: Big Picture - What is a GPU?</h1>
+        
+        <div class="meta" style="color: var(--muted); margin: 20px 0;">
+            <span>Part I: GPU Fundamentals</span> • 
+            <span>Reading time: ~45 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            Welcome to your journey of building a GPU from scratch! Whether you're a final-year computer science student, 
+            an aspiring GPU engineer, or launching a hardware startup, this book will take you from the very basics to 
+            sending a chip design to a manufacturer.
+        </p>
+
+        <p>
+            Let's start with a simple question: <strong>What is a GPU, really?</strong>
+        </p>
+
+        <h2>1.1 The Classroom Analogy</h2>
+        
+        <p>
+            Imagine you have a huge worksheet with 1,000 simple math problems. You have two choices:
+        </p>
+
+        <ul>
+            <li><strong>Option A:</strong> Give it to one super-smart student who solves problems very quickly, one after another.</li>
+            <li><strong>Option B:</strong> Give it to a classroom of 1,000 students, where each student solves just one problem.</li>
+        </ul>
+
+        <p>
+            Option A is like a <strong>CPU</strong> (Central Processing Unit). It's incredibly smart and fast at solving 
+            complex problems, but it can only work on one thing at a time (or a few things with modern multi-core CPUs).
+        </p>
+
+        <p>
+            Option B is like a <strong>GPU</strong> (Graphics Processing Unit). It might not be as clever for complex problems, 
+            but when you have lots of similar, simple work to do, it crushes through it in parallel.
+        </p>
+
+        <div class="key-takeaway">
+            <strong>Key Takeaway:</strong> GPUs are designed for <em>throughput</em> (doing lots of work in parallel), 
+            while CPUs are designed for <em>latency</em> (doing one thing as fast as possible).
+        </div>
+
+        <h2>1.2 Where Did GPUs Come From?</h2>
+
+        <h3>The Graphics Era (1990s - 2000s)</h3>
+        <p>
+            GPUs were originally built to draw pixels on your screen for video games. When you play a game, the computer 
+            needs to:
+        </p>
+        <ol>
+            <li>Take 3D shapes (triangles)</li>
+            <li>Figure out where they appear on your 2D screen</li>
+            <li>Color every single pixel</li>
+            <li>Do this 60+ times per second</li>
+        </ol>
+
+        <p>
+            For a 1920×1080 screen, that's over 2 million pixels! And each pixel might need complex calculations for 
+            lighting, shadows, reflections, and textures. A CPU would take forever. But since the same operation 
+            (like "calculate this pixel's color") happens millions of times, it's perfect for parallel processing.
+        </p>
+
+        <h3>The GPGPU Revolution (2006 onwards)</h3>
+        <p>
+            Around 2006, NVIDIA released CUDA (Compute Unified Device Architecture), which let programmers use GPUs 
+            for <em>any</em> parallel computation, not just graphics. This was called <strong>GPGPU</strong> 
+            (General-Purpose computing on Graphics Processing Units).
+        </p>
+
+        <p>
+            Suddenly, GPUs became incredibly useful for:
+        </p>
+        <ul>
+            <li><strong>Scientific computing:</strong> weather simulation, protein folding, physics</li>
+            <li><strong>Finance:</strong> risk analysis, options pricing</li>
+            <li><strong>Image/video processing:</strong> encoding, filtering, computer vision</li>
+            <li><strong>Cryptography:</strong> Bitcoin mining</li>
+            <li><strong>AI/Machine Learning:</strong> training neural networks (the biggest use today)</li>
+        </ul>
+
+        <div class="figure">
+            <pre style="font-family: monospace;">
+    CPU                           GPU
+    ┌────────────┐               ┌──┬──┬──┬──┬──┬──┬──┬──┐
+    │            │               │  │  │  │  │  │  │  │  │
+    │   SMART    │               ├──┼──┼──┼──┼──┼──┼──┼──┤
+    │   CORE     │               │  │  │  │  │  │  │  │  │
+    │            │               ├──┼──┼──┼──┼──┼──┼──┼──┤
+    │   (×4)     │               │  │  │  │  │  │  │  │  │
+    │            │               ├──┼──┼──┼──┼──┼──┼──┼──┤
+    └────────────┘               │  │  │  │  │  │  │  │  │
+                                 └──┴──┴──┴──┴──┴──┴──┴──┘
+    Few, powerful cores          Many, simple cores
+            </pre>
+            <div class="figure-caption">Figure 1.1: CPU vs GPU core organization</div>
+        </div>
+
+        <h2>1.3 Real-World Applications Today</h2>
+
+        <h3>Artificial Intelligence</h3>
+        <p>
+            Training a large language model like GPT or Llama requires processing billions of numbers in parallel. 
+            Modern AI training clusters use thousands of GPUs working together. A single training run can cost millions 
+            of dollars in GPU time.
+        </p>
+
+        <h3>Graphics & Gaming</h3>
+        <p>
+            Modern games use <strong>ray tracing</strong> to simulate realistic light bounces. This requires tracing 
+            millions of light rays per frame. GPUs now include specialized "ray tracing cores" just for this.
+        </p>
+
+        <h3>Scientific Research</h3>
+        <p>
+            Protein folding simulations (like AlphaFold) use GPUs to explore billions of molecular configurations. 
+            Weather models run on GPU clusters to predict storms days in advance.
+        </p>
+
+        <h3>Cryptocurrency</h3>
+        <p>
+            Proof-of-work cryptocurrencies like Bitcoin and Ethereum (before "The Merge") rely on GPUs to perform 
+            trillions of hash operations per second.
+        </p>
+
+        <h2>1.4 Why Build Your Own GPU?</h2>
+
+        <p>
+            You might be thinking: "NVIDIA, AMD, and Intel already make amazing GPUs. Why build my own?"
+        </p>
+
+        <p>Here are some great reasons:</p>
+
+        <h3>1. Learning</h3>
+        <p>
+            Building a GPU teaches you about computer architecture, parallel programming, hardware design, and 
+            the entire chip development flow. These skills are valuable across the tech industry.
+        </p>
+
+        <h3>2. Custom Accelerators</h3>
+        <p>
+            Sometimes you need a specialized chip for a specific task. Companies build custom GPUs for:
+        </p>
+        <ul>
+            <li>Edge AI inference (Google's Edge TPU, Tesla's FSD chip)</li>
+            <li>Video encoding/decoding</li>
+            <li>Networking and packet processing</li>
+            <li>Cryptocurrency mining ASICs</li>
+        </ul>
+
+        <h3>3. Startup Opportunities</h3>
+        <p>
+            There's a growing market for domain-specific accelerators. If you can build a chip that's 10× better 
+            for a specific workload, you might have a business. Examples: Groq (AI inference), Tenstorrent, Cerebras.
+        </p>
+
+        <h3>4. Open-Source Hardware</h3>
+        <p>
+            The open-source hardware movement is growing. Projects like RISC-V show that open ISAs can compete with 
+            proprietary ones. We need open GPU designs too!
+        </p>
+
+        <div class="key-takeaway">
+            <strong>Key Insight:</strong> You don't need to beat NVIDIA at gaming GPUs. Find a niche where 
+            specialization matters more than raw performance.
+        </div>
+
+        <h2>1.5 GPU Market Landscape</h2>
+
+        <h3>The Big Three</h3>
+        
+        <h4>NVIDIA</h4>
+        <p>
+            Market leader in both gaming and AI. Their CUDA ecosystem is the de facto standard for GPU computing. 
+            Products range from consumer GeForce cards to datacenter H100 GPUs costing $30,000+ each.
+        </p>
+
+        <h4>AMD</h4>
+        <p>
+            Second-largest player. Radeon for gaming, Instinct for compute. Uses open-source ROCm ecosystem. 
+            Strong price/performance in consumer market.
+        </p>
+
+        <h4>Intel</h4>
+        <p>
+            Newcomer with Arc GPUs for gaming and Ponte Vecchio for HPC. Leveraging their fab capabilities 
+            and oneAPI software stack.
+        </p>
+
+        <h3>Emerging Players</h3>
+        <ul>
+            <li><strong>Google:</strong> TPUs (Tensor Processing Units) for AI</li>
+            <li><strong>Tesla:</strong> FSD (Full Self-Driving) chip</li>
+            <li><strong>Apple:</strong> M-series GPU architecture</li>
+            <li><strong>Qualcomm:</strong> Adreno for mobile</li>
+            <li><strong>Startups:</strong> Groq, Cerebras, Graphcore, Tenstorrent</li>
+        </ul>
+
+        <h2>1.6 What You'll Learn in This Book</h2>
+
+        <p>
+            This book is structured in five parts that take you from concepts to manufacturing:
+        </p>
+
+        <h3>Part I: GPU Fundamentals (Chapters 1-5)</h3>
+        <p>
+            Understanding the "why" and "what" of GPU architecture. You'll learn about parallel execution models, 
+            core components, and instruction sets.
+        </p>
+
+        <h3>Part II: Execution & Scheduling (Chapters 6-11)</h3>
+        <p>
+            How GPUs actually run code. Pipeline design, memory systems, scheduling, and specialized units.
+        </p>
+
+        <h3>Part III: Software & Tooling (Chapters 12-14)</h3>
+        <p>
+            The software stack that makes hardware useful. Compilers, drivers, programming models, and testing.
+        </p>
+
+        <h3>Part IV: Hardware Implementation (Chapters 15-21)</h3>
+        <p>
+            Writing actual RTL (Verilog/SystemVerilog), building cores, synthesis, and timing closure. 
+            This is where you create the real design.
+        </p>
+
+        <h3>Part V: Physical Design & Manufacturing (Chapters 22-25)</h3>
+        <p>
+            Taking your design from RTL to silicon. Physical design, signoff checks, tape-out, and manufacturing.
+        </p>
+
+        <div class="key-takeaway">
+            <strong>Learning Path:</strong> Read chapters in order for the first time. On second reading, focus on 
+            the parts most relevant to your goals (e.g., skip Part V if you're only simulating).
+        </div>
+
+        <h2>1.7 Prerequisites</h2>
+
+        <p>
+            This book assumes you have:
+        </p>
+        <ul>
+            <li>Basic programming knowledge (C, C++, or Python)</li>
+            <li>Understanding of binary, hex, and basic computer organization</li>
+            <li>Familiarity with logic gates (AND, OR, NOT, etc.)</li>
+            <li>Willingness to learn Verilog/SystemVerilog (we'll teach you)</li>
+        </ul>
+
+        <p>
+            If you're a final-year CS student, you're probably ready. If you've taken a computer architecture 
+            or digital logic course, you're definitely ready.
+        </p>
+
+        <h2>1.8 How to Use This Book</h2>
+
+        <h3>For Students</h3>
+        <p>
+            Read each chapter thoroughly. Do the exercises. Build the example GPU as you go. Use it as a 
+            capstone project or thesis work.
+        </p>
+
+        <h3>For Startup Founders</h3>
+        <p>
+            Focus on Parts I-II for architecture decisions. Skim Part III unless you're building a compiler. 
+            Deep-dive Part IV-V when you're ready to build silicon. Use appendices as reference.
+        </p>
+
+        <h3>For Hobbyists</h3>
+        <p>
+            Follow along at your own pace. Skip the heavy math if it's not your thing. Focus on simulation and 
+            RTL design. The satisfaction of seeing your GPU run a matrix multiply kernel is incredible!
+        </p>
+
+        <div class="exercise">
+            <strong>Exercise 1.1:</strong> List three applications where GPUs outperform CPUs and explain why 
+            parallel execution helps in each case.
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 1.2:</strong> Research one GPU startup (Groq, Cerebras, Graphcore, or Tenstorrent). 
+            What niche are they targeting? What's their key innovation?
+        </div>
+
+        <div class="exercise">
+            <strong>Exercise 1.3:</strong> Install a GPU programming framework (CUDA Toolkit, ROCm, or oneAPI) 
+            on your machine. Write a "Hello World" kernel that runs on the GPU.
+        </div>
+
+        <h2>1.9 Chapter Summary</h2>
+
+        <p>
+            In this chapter, we covered:
+        </p>
+        <ul>
+            <li>What GPUs are and how they differ from CPUs</li>
+            <li>The history of GPUs from graphics to general-purpose computing</li>
+            <li>Modern applications: AI, gaming, scientific computing, cryptocurrency</li>
+            <li>Why building your own GPU is valuable</li>
+            <li>The market landscape and key players</li>
+            <li>What you'll learn in this book</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <strong>Next Steps:</strong> In Chapter 2, we'll dive deep into the architectural differences between 
+            CPUs and GPUs, exploring how transistor budgets, memory hierarchies, and design philosophies diverge.
+        </div>
+
+        <h2>Further Reading</h2>
+        <ul>
+            <li><a href="#cuda-by-example">"CUDA by Example" by Sanders &amp; Kandrot</a> — hands-on GPU programming</li>
+            <li><a href="#pmpp">"Programming Massively Parallel Processors" by Hwu et al.</a> — comprehensive GPU computing text</li>
+            <li><a href="#cuda-guide">NVIDIA's CUDA Programming Guide</a> — official documentation</li>
+            <li><a href="#hennessy">"Computer Architecture: A Quantitative Approach" by Hennessy &amp; Patterson</a> — chapter(s) on GPUs</li>
+            <li><a href="#ieee-survey">Papers: "GPUs and the Future of Parallel Computing" (IEEE Micro, 2011)</a> — survey and research directions</li>
+        </ul>
+
+        <div id="further-reading-notes">
+            <h3 id="cuda-by-example">"CUDA by Example" — Sanders &amp; Kandrot</h3>
+            <p>
+                A practical, example-driven introduction to CUDA. Best for beginners who want to learn how to
+                write simple kernels, launch them from host code, and understand basic CUDA memory spaces.
+                Recommended reading: the first 4 chapters (kernels, threads, memory). Pair with Exercise 1.3.
+            </p>
+            <p>
+                <strong>📦 Open-Source Code Resources:</strong>
+            </p>
+            <ul>
+                <li><a href="https://github.com/CodedK/CUDA-by-Example-source-code-for-the-book-s-examples-" target="_blank">Official example code from the book</a> — All source code examples, ready to compile and run</li>
+                <li><a href="https://github.com/yottaawesome/cuda-by-example" target="_blank">Clean copy with license</a> — Well-organized repo with proper licensing</li>
+                <li><a href="https://github.com/eegkno/CUDA_by_practice" target="_blank">Practice codes + theory PDF</a> — Extended practice exercises with solutions and theory notes</li>
+            </ul>
+
+            <h3 id="pmpp">"Programming Massively Parallel Processors" — Hwu et al.</h3>
+            <p>
+                A deeper treatment of GPU architecture and parallel algorithms. Covers SIMD execution,
+                memory hierarchies, performance modeling, and optimization techniques.
+                Good for readers who want both theory and practical tuning advice.
+            </p>
+            <p>
+                <strong>📦 Open-Source Code Resources:</strong>
+            </p>
+            <ul>
+                <li><a href="https://github.com/nvixnu/pmpp__programming_massively_parallel_processors" target="_blank">3rd Edition examples</a> — Complete examples and exercises from the 3rd edition</li>
+                <li><a href="https://github.com/tugot17/pmpp" target="_blank">4th Edition solutions</a> — Full solutions to exercises from the latest (4th) edition</li>
+                <li><a href="https://github.com/R100001/Programming-Massively-Parallel-Processors" target="_blank">Multi-edition source code</a> — Working CUDA code and benchmarks across multiple editions</li>
+            </ul>
+
+            <h3 id="cuda-guide">NVIDIA CUDA Programming Guide</h3>
+            <p>
+                The authoritative reference for the CUDA programming model, runtime API, and memory model.
+                Use this for exact API behavior, compiler flags, and performance recommendations when
+                moving from examples to real applications.
+            </p>
+            <p>
+                <strong>🆓 Official Free Documentation:</strong>
+            </p>
+            <ul>
+                <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html" target="_blank">Online HTML version</a> — Always up-to-date, searchable, comprehensive</li>
+                <li><a href="https://docs.nvidia.com/cuda/pdf/CUDA_C_Programming_Guide.pdf" target="_blank">PDF download</a> — Latest release (13.1+), perfect for offline reading</li>
+            </ul>
+
+            <h3 id="hennessy">"Computer Architecture: A Quantitative Approach" — Hennessy &amp; Patterson</h3>
+            <p>
+                This classic text gives rigorous performance analysis and trade-off discussion. Read the
+                sections on vector/SIMD processors and accelerators to gain a quantitative view of
+                why GPUs are designed the way they are.
+            </p>
+            <p>
+                <strong>🆓 Freely Accessible Versions:</strong>
+            </p>
+            <ul>
+                <li><a href="https://archive.org/details/computerarchitectureaquantitativeapproach6thedition" target="_blank">6th Edition on Internet Archive</a> — Borrow/stream the full text (includes GPU chapters)</li>
+                <li>Earlier editions (5th) available through academic repositories and public PDFs</li>
+            </ul>
+
+            <h3 id="ieee-survey">"GPUs and the Future of Parallel Computing" (IEEE Micro, 2011)</h3>
+            <p>
+                A useful survey paper that summarizes the evolution of GPU hardware and research directions
+                as of 2011. Good for historical context and for spotting recurring research themes.
+            </p>
+            <p>
+                <strong>🆓 Open-Access Versions:</strong>
+            </p>
+            <ul>
+                <li><a href="https://www.researchgate.net/publication/224262634_GPUs_and_the_Future_of_Parallel_Computing" target="_blank">ResearchGate (full PDF)</a> — Free full-text access</li>
+                <li><a href="https://research.nvidia.com/publication/2011-09_gpus-and-future-parallel-computing" target="_blank">NVIDIA Research page</a> — Abstract and possible PDF download</li>
+                <li>Also available via Semantic Scholar and IEEE Xplore (institutional access or author copies)</li>
+            </ul>
+            
+            <div class="key-takeaway" style="margin-top: 30px;">
+                <strong>💡 Learning Tip:</strong> Start with the GitHub repos for "CUDA by Example" and "PMPP" — 
+                they contain all the hands-on code examples you can compile and run immediately. The NVIDIA CUDA 
+                Programming Guide is your authoritative reference for detailed API behavior. Use the paper for 
+                historical context on GPU evolution.
+            </div>
+        </div>
+
+        <div class="chapter-nav">
+            <a href="../index.html">← Table of Contents</a>
+            <a href="chapter-02.html">Next: GPU vs CPU →</a>
+        </div>
+    </div>
+</body>
+</html>

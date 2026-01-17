@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chapter 12: Software Stack and Compilation | Create Your Own GPU</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+        .chapter-content { max-width: 850px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
+        .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="chapter-content">
+        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
+            <a href="chapter-11.html">← Previous: Graphics vs Compute</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-13.html">Next: Compilers & Code Generation →</a>
+        </div>
+
+        <h1>Chapter 12: Software Stack and GPU Drivers</h1>
+        
+        <div style="color: #999; margin: 20px 0;">
+            <span>Part III: Software & Tooling</span> • <span>Reading time: ~60 min</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            The software stack sits between your CUDA kernel and the GPU hardware. It includes drivers, 
+            runtime libraries, compilers, and APIs. Understanding this stack is crucial for optimization and debugging.
+        </p>
+
+        <h2>12.1 GPU Software Stack Layers</h2>
+        
+        <div class="code-block">
+<pre>Application Code
+    ↓
+CUDA/HIP/OpenCL API (cudaMemcpy, cudaLaunchKernel, etc.)
+    ↓
+GPU Runtime Library (libnvcc, libhip)
+    ↓
+GPU Driver (NVIDIA driver, AMD AMDGPU driver)
+    ↓
+Kernel Mode Driver
+    ↓
+GPU Hardware
