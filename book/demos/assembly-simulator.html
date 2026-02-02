@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Assembly Simulator - Tiny-GPU</title>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .simulator-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1rem 0;
+        }
+        @media (max-width: 1024px) {
+            .simulator-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .panel-header {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-body {
+            padding: 1rem;
+        }
+        
+        /* Code Editor */
+        .code-editor {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            width: 100%;
+            min-height: 300px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border: none;
+            padding: 1rem;
+            resize: vertical;
+            line-height: 1.5;
+        }
+        .code-editor:focus {
+            outline: 2px solid var(--primary-color);
+        }
+        
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: #252526;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5a7bc0;
+        }
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #45a049;
+        }
+        .btn-warning {
+            background: #ff9800;
+            color: black;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Registers */
+        .register-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+        .register {
+            background: #1e1e1e;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+            font-family: monospace;
+        }
+        .register-name {
+            color: #9cdcfe;
+            font-size: 0.75rem;
+        }
+        .register-value {
+            color: #b5cea8;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        .register.special {
+            background: #2d2d30;
+        }
+        .register.special .register-name {
+            color: #c586c0;
+        }
+        .register.changed {
+            animation: flash 0.5s;
+        }
+        @keyframes flash {
+            0%, 100% { background: #1e1e1e; }
+            50% { background: #4caf50; }
+        }
+        
+        /* Memory View */
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        .memory-cell {
+            background: #1e1e1e;
+            padding: 0.25rem;
+            text-align: center;
+            border-radius: 2px;
+        }
+        .memory-cell.header {
+            background: #333;
+            color: #888;
+        }
+        .memory-cell.changed {
+            background: #4caf50;
+            color: black;
+        }
+        .memory-cell.read {
+            background: #2196f3;
+            color: white;
+        }
+        
+        /* NZP Flags */
+        .nzp-display {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            padding: 0.5rem;
+            background: #1e1e1e;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+        .nzp-flag {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .nzp-flag.active {
+            background: #4caf50;
+            color: white;
+        }
+        .nzp-flag.inactive {
+            background: #333;
+            color: #666;
+        }
+        
+        /* Output Log */
+        .output-log {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 1rem;
+            min-height: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        /* PC Highlight */
+        .instruction-line {
+            padding: 0.25rem 0.5rem;
+            font-family: monospace;
+            display: flex;
+            gap: 1rem;
+        }
+        .instruction-line.current {
+            background: rgba(76, 175, 80, 0.3);
+            border-left: 3px solid #4caf50;
+        }
+        .instruction-line .addr {
+            color: #888;
+            min-width: 40px;
+        }
+        .instruction-line .hex {
+            color: #569cd6;
+            min-width: 60px;
+        }
+        .instruction-line .asm {
+            color: #d4d4d4;
+        }
+        
+        /* Thread Selector */
+        .thread-selector {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .thread-btn {
+            padding: 0.25rem 0.75rem;
+            border: 1px solid #555;
+            background: #333;
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .thread-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        /* Speed Control */
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #aaa;
+        }
+        .speed-slider {
+            width: 100px;
+        }
+        
+        /* Status Bar */
+        .status-bar {
+            background: #007acc;
+            color: white;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* Examples dropdown */
+        .example-select {
+            padding: 0.5rem;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="../table-of-contents.html" class="nav-link">← Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="../appendices/appendix-b-instruction-reference.html" class="nav-link">ISA Reference →</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Interactive Demo</div>
+        <h1>Tiny-GPU Assembly Simulator</h1>
+        <p class="chapter-subtitle">Write, assemble, and execute GPU kernels in your browser</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="intro">
+            <p>This simulator lets you write Tiny-GPU assembly code and watch it execute step-by-step. You can observe register values, memory contents, and NZP flags change as each instruction runs.</p>
+            
+            <div class="info-box">
+                <strong>Getting Started:</strong> Select an example program or write your own assembly code, then click <strong>Assemble</strong> to compile and <strong>Step</strong> or <strong>Run</strong> to execute.
+            </div>
+        </section>
+
+        <div class="simulator-container">
+            <!-- Left Column: Code Editor -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>📝 Assembly Editor</span>
+                    <select id="exampleSelect" class="example-select">
+                        <option value="">-- Load Example --</option>
+                        <option value="simple_add">Simple Addition</option>
+                        <option value="loop">Loop Example</option>
+                        <option value="matadd">Matrix Add (Thread)</option>
+                        <option value="conditional">Conditional Branch</option>
+                    </select>
+                </div>
+                <textarea id="codeEditor" class="code-editor">; Simple Addition Example
+; Computes R0 = 5 + 3
+
+CONST R1, 5      ; R1 = 5
+CONST R2, 3      ; R2 = 3
+ADD R0, R1, R2   ; R0 = R1 + R2 = 8
+RET              ; Done</textarea>
+                <div class="controls">
+                    <button id="btnAssemble" class="btn btn-primary">⚙️ Assemble</button>
+                    <button id="btnStep" class="btn btn-success" disabled>⏭️ Step</button>
+                    <button id="btnRun" class="btn btn-success" disabled>▶️ Run</button>
+                    <button id="btnPause" class="btn btn-warning" disabled>⏸️ Pause</button>
+                    <button id="btnReset" class="btn btn-danger" disabled>🔄 Reset</button>
+                    <div class="speed-control">
+                        <label>Speed:</label>
+                        <input type="range" id="speedSlider" class="speed-slider" min="50" max="1000" value="300">
+                    </div>
+                </div>
+                
+                <!-- Assembled Instructions View -->
+                <div id="instructionView" class="panel-body" style="display:none;">
+                    <strong>Assembled Instructions:</strong>
+                    <div id="instructionList" style="margin-top:0.5rem;"></div>
+                </div>
+            </div>
+            
+            <!-- Right Column: State View -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>🔍 Execution State</span>
+                    <span id="pcDisplay" style="font-family:monospace;">PC: 0</span>
+                </div>
+                <div class="panel-body">
+                    <!-- Thread Selector -->
+                    <div style="margin-bottom:1rem;">
+                        <strong>Thread:</strong>
+                        <div class="thread-selector" id="threadSelector">
+                            <button class="thread-btn active" data-tid="0">T0</button>
+                            <button class="thread-btn" data-tid="1">T1</button>
+                            <button class="thread-btn" data-tid="2">T2</button>
+                            <button class="thread-btn" data-tid="3">T3</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Registers -->
+                    <strong>Registers:</strong>
+                    <div class="register-grid" id="registerGrid">
+                        <!-- Will be populated by JS -->
+                    </div>
+                    
+                    <!-- NZP Flags -->
+                    <div class="nzp-display" id="nzpDisplay">
+                        <span class="nzp-flag inactive" id="flagN">N</span>
+                        <span class="nzp-flag inactive" id="flagZ">Z</span>
+                        <span class="nzp-flag inactive" id="flagP">P</span>
+                    </div>
+                </div>
+                
+                <!-- Memory View -->
+                <div class="panel-header" style="margin-top:1rem;">
+                    <span>💾 Data Memory (first 64 bytes)</span>
+                </div>
+                <div class="panel-body">
+                    <div class="memory-grid" id="memoryGrid">
+                        <!-- Will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Output Log -->
+        <div class="panel" style="margin-top:1rem;">
+            <div class="panel-header">
+                <span>📋 Execution Log</span>
+                <button id="btnClearLog" class="btn" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Clear</button>
+            </div>
+            <div id="outputLog" class="output-log">Welcome to Tiny-GPU Simulator!
+Type assembly code or select an example, then click Assemble.
+</div>
+        </div>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span id="statusText">Ready</span>
+            <span id="cycleCount">Cycle: 0</span>
+        </div>
+
+        <section id="reference" style="margin-top:2rem;">
+            <h2>Quick Reference</h2>
+            <h3>Instruction Format</h3>
+            <table class="port-table">
+                <thead>
+                    <tr><th>Instruction</th><th>Syntax</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>ADD</td><td>ADD RD, RS1, RS2</td><td>RD = RS1 + RS2</td></tr>
+                    <tr><td>SUB</td><td>SUB RD, RS1, RS2</td><td>RD = RS1 - RS2</td></tr>
+                    <tr><td>MUL</td><td>MUL RD, RS1, RS2</td><td>RD = RS1 × RS2</td></tr>
+                    <tr><td>DIV</td><td>DIV RD, RS1, RS2</td><td>RD = RS1 ÷ RS2</td></tr>
+                    <tr><td>AND</td><td>AND RD, RS1, RS2</td><td>RD = RS1 & RS2</td></tr>
+                    <tr><td>OR</td><td>OR RD, RS1, RS2</td><td>RD = RS1 | RS2</td></tr>
+                    <tr><td>NOT</td><td>NOT RD, RS1</td><td>RD = ~RS1</td></tr>
+                    <tr><td>XOR</td><td>XOR RD, RS1, RS2</td><td>RD = RS1 ^ RS2</td></tr>
+                    <tr><td>CMP</td><td>CMP RD, RS1, RS2</td><td>RD = RS1 - RS2 (sets NZP)</td></tr>
+                    <tr><td>LDR</td><td>LDR RD, RS1, RS2</td><td>RD = Memory[RS1 + RS2]</td></tr>
+                    <tr><td>STR</td><td>STR RD, RS1, RS2</td><td>Memory[RS1 + RS2] = RD</td></tr>
+                    <tr><td>CONST</td><td>CONST RD, imm</td><td>RD = immediate (0-255)</td></tr>
+                    <tr><td>BRnzp</td><td>BRn/BRz/BRp/BRnzp label</td><td>Branch if condition met</td></tr>
+                    <tr><td>RET</td><td>RET</td><td>End execution</td></tr>
+                </tbody>
+            </table>
+            
+            <h3>Special Registers</h3>
+            <ul>
+                <li><strong>R13</strong> (%blockIdx): Block index (default: 0)</li>
+                <li><strong>R14</strong> (%blockDim): Threads per block (default: 4)</li>
+                <li><strong>R15</strong> (%threadIdx): Thread index within block (0-3)</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script>
+        // ============================================
+        // Tiny-GPU Simulator - Core Engine
+        // ============================================
+        
+        const OPCODES = {
+            'ADD': 0, 'SUB': 1, 'MUL': 2, 'DIV': 3,
+            'AND': 4, 'OR': 5, 'NOT': 6, 'XOR': 7,
+            'CMP': 8, 'LDR': 9, 'STR': 10, 'CONST': 11,
+            'BR': 12, 'BRN': 12, 'BRZ': 12, 'BRP': 12,
+            'BRNZ': 12, 'BRNP': 12, 'BRZP': 12, 'BRNZP': 12,
+            'RET': 13
+        };
+        
+        const BRANCH_CONDS = {
+            'BRN': 0b100, 'BRZ': 0b010, 'BRP': 0b001,
+            'BRNZ': 0b110, 'BRNP': 0b101, 'BRZP': 0b011,
+            'BRNZP': 0b111, 'BR': 0b111
+        };
+        
+        // Example programs
+        const EXAMPLES = {
+            simple_add: `; Simple Addition Example
+; Computes R0 = 5 + 3
+
+CONST R1, 5      ; R1 = 5
+CONST R2, 3      ; R2 = 3
+ADD R0, R1, R2   ; R0 = R1 + R2 = 8
+RET              ; Done`,
+
+            loop: `; Loop Example
+; Sum numbers 1 to 5: R0 = 1+2+3+4+5 = 15
+
+CONST R0, 0      ; R0 = sum = 0
+CONST R1, 1      ; R1 = counter = 1
+CONST R2, 5      ; R2 = limit = 5
+CONST R3, 1      ; R3 = increment = 1
+
+LOOP:
+ADD R0, R0, R1   ; sum += counter
+ADD R1, R1, R3   ; counter++
+CMP R4, R1, R2   ; compare counter to limit
+BRnz LOOP        ; if counter <= limit, continue
+
+RET              ; Done: R0 = 15`,
+
+            matadd: `; Matrix Addition (Per-Thread)
+; Each thread computes C[tid] = A[tid] + B[tid]
+; A at addr 0, B at addr 16, C at addr 32
+
+CONST R0, 0      ; R0 = base A
+CONST R1, 16     ; R1 = base B
+CONST R2, 32     ; R2 = base C
+
+; Use threadIdx (R15) as offset
+LDR R3, R0, R15  ; R3 = A[threadIdx]
+LDR R4, R1, R15  ; R4 = B[threadIdx]
+ADD R5, R3, R4   ; R5 = A[tid] + B[tid]
+STR R5, R2, R15  ; C[threadIdx] = R5
+
+RET`,
+
+            conditional: `; Conditional Example
+; If R1 > R2, R0 = 1, else R0 = 0
+
+CONST R1, 10     ; R1 = 10
+CONST R2, 5      ; R2 = 5
+CONST R0, 0      ; R0 = 0 (default)
+
+CMP R3, R1, R2   ; R3 = R1 - R2
+BRnz SKIP        ; if R1 <= R2, skip
+CONST R0, 1      ; R0 = 1 (R1 > R2)
+
+SKIP:
+RET`
+        };
+        
+        // Simulator State
+        let state = {
+            instructions: [],
+            threads: [],
+            memory: new Array(256).fill(0),
+            pc: 0,
+            running: false,
+            halted: false,
+            cycle: 0,
+            currentThread: 0,
+            labels: {}
+        };
+        
+        // Initialize thread states
+        function initThreads() {
+            state.threads = [];
+            for (let i = 0; i < 4; i++) {
+                state.threads.push({
+                    registers: new Array(16).fill(0),
+                    nzp: { n: false, z: true, p: false }
+                });
+                // Set special registers
+                state.threads[i].registers[13] = 0;  // blockIdx
+                state.threads[i].registers[14] = 4;  // blockDim
+                state.threads[i].registers[15] = i;  // threadIdx
+            }
+        }
+        
+        // Initialize memory with test data for matrix examples
+        function initMemory() {
+            state.memory = new Array(256).fill(0);
+            // Pre-load matrix A at address 0
+            for (let i = 0; i < 16; i++) {
+                state.memory[i] = i + 1;
+            }
+            // Pre-load matrix B at address 16
+            for (let i = 0; i < 16; i++) {
+                state.memory[16 + i] = 16 - i;
+            }
+        }
+        
+        // Parse register (R0-R15)
+        function parseReg(s) {
+            s = s.trim().toUpperCase().replace(',', '');
+            if (s.startsWith('R')) {
+                const num = parseInt(s.slice(1));
+                if (num >= 0 && num <= 15) return num;
+            }
+            throw new Error(`Invalid register: ${s}`);
+        }
+        
+        // Parse immediate value
+        function parseImm(s) {
+            s = s.trim().replace(',', '');
+            if (s.startsWith('0X')) {
+                return parseInt(s, 16);
+            }
+            return parseInt(s);
+        }
+        
+        // Assemble one line
+        function assembleLine(line, lineNum, labels) {
+            // Remove comments
+            const commentIdx = line.indexOf(';');
+            if (commentIdx >= 0) line = line.slice(0, commentIdx);
+            line = line.trim();
+            if (!line) return null;
+            
+            // Check for label
+            if (line.endsWith(':')) {
+                return { type: 'label', name: line.slice(0, -1).toUpperCase() };
+            }
+            
+            // Parse instruction
+            const parts = line.split(/[\s,]+/).filter(p => p);
+            if (parts.length === 0) return null;
+            
+            const op = parts[0].toUpperCase();
+            
+            // RET instruction
+            if (op === 'RET') {
+                return { type: 'instr', opcode: OPCODES.RET, hex: 0xD000, asm: 'RET' };
+            }
+            
+            // Branch instructions
+            if (op in BRANCH_CONDS || op === 'BR') {
+                const cond = BRANCH_CONDS[op] || 0b111;
+                const target = parts[1].toUpperCase();
+                return { 
+                    type: 'instr', 
+                    opcode: OPCODES.BR, 
+                    cond: cond, 
+                    target: target,
+                    asm: `${op} ${target}`
+                };
+            }
+            
+            // CONST instruction
+            if (op === 'CONST') {
+                const rd = parseReg(parts[1]);
+                const imm = parseImm(parts[2]);
+                const hex = (OPCODES.CONST << 12) | (rd << 8) | (imm & 0xFF);
+                return { 
+                    type: 'instr', 
+                    opcode: OPCODES.CONST, 
+                    rd: rd, 
+                    imm: imm,
+                    hex: hex,
+                    asm: `CONST R${rd}, ${imm}`
+                };
+            }
+            
+            // NOT instruction (only 2 operands)
+            if (op === 'NOT') {
+                const rd = parseReg(parts[1]);
+                const rs1 = parseReg(parts[2]);
+                const hex = (OPCODES.NOT << 12) | (rd << 8) | (rs1 << 4);
+                return {
+                    type: 'instr',
+                    opcode: OPCODES.NOT,
+                    rd: rd, rs1: rs1, rs2: 0,
+                    hex: hex,
+                    asm: `NOT R${rd}, R${rs1}`
+                };
+            }
+            
+            // R-type instructions
+            if (op in OPCODES) {
+                const rd = parseReg(parts[1]);
+                const rs1 = parseReg(parts[2]);
+                const rs2 = parseReg(parts[3]);
+                const hex = (OPCODES[op] << 12) | (rd << 8) | (rs1 << 4) | rs2;
+                return {
+                    type: 'instr',
+                    opcode: OPCODES[op],
+                    rd: rd, rs1: rs1, rs2: rs2,
+                    hex: hex,
+                    asm: `${op} R${rd}, R${rs1}, R${rs2}`
+                };
+            }
+            
+            throw new Error(`Unknown instruction: ${op} at line ${lineNum}`);
+        }
+        
+        // Full assembler
+        function assemble(code) {
+            const lines = code.split('\n');
+            const labels = {};
+            const instructions = [];
+            let addr = 0;
+            
+            // First pass: collect labels
+            for (let i = 0; i < lines.length; i++) {
+                const result = assembleLine(lines[i], i + 1, labels);
+                if (result) {
+                    if (result.type === 'label') {
+                        labels[result.name] = addr;
+                    } else {
+                        addr++;
+                    }
+                }
+            }
+            
+            // Second pass: generate instructions
+            addr = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const result = assembleLine(lines[i], i + 1, labels);
+                if (result && result.type === 'instr') {
+                    // Resolve branch targets
+                    if (result.target) {
+                        const targetAddr = labels[result.target];
+                        if (targetAddr === undefined) {
+                            throw new Error(`Unknown label: ${result.target}`);
+                        }
+                        const offset = targetAddr - addr - 1;
+                        result.hex = (OPCODES.BR << 12) | (result.cond << 9) | (offset & 0x1FF);
+                        result.offset = offset;
+                    }
+                    result.addr = addr;
+                    instructions.push(result);
+                    addr++;
+                }
+            }
+            
+            return { instructions, labels };
+        }
+        
+        // Execute one instruction for all threads
+        function executeInstruction() {
+            if (state.pc >= state.instructions.length || state.halted) {
+                state.halted = true;
+                return false;
+            }
+            
+            const instr = state.instructions[state.pc];
+            let log = `[${state.cycle}] PC=${state.pc}: ${instr.asm}`;
+            
+            for (let tid = 0; tid < 4; tid++) {
+                const t = state.threads[tid];
+                const regs = t.registers;
+                
+                switch (instr.opcode) {
+                    case OPCODES.ADD:
+                        regs[instr.rd] = (regs[instr.rs1] + regs[instr.rs2]) & 0xFF;
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.SUB:
+                        regs[instr.rd] = (regs[instr.rs1] - regs[instr.rs2]) & 0xFF;
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.MUL:
+                        regs[instr.rd] = (regs[instr.rs1] * regs[instr.rs2]) & 0xFF;
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.DIV:
+                        regs[instr.rd] = regs[instr.rs2] !== 0 ? 
+                            Math.floor(regs[instr.rs1] / regs[instr.rs2]) : 0;
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.AND:
+                        regs[instr.rd] = regs[instr.rs1] & regs[instr.rs2];
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.OR:
+                        regs[instr.rd] = regs[instr.rs1] | regs[instr.rs2];
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.NOT:
+                        regs[instr.rd] = (~regs[instr.rs1]) & 0xFF;
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.XOR:
+                        regs[instr.rd] = regs[instr.rs1] ^ regs[instr.rs2];
+                        updateNZP(t, regs[instr.rd]);
+                        break;
+                    case OPCODES.CMP:
+                        regs[instr.rd] = (regs[instr.rs1] - regs[instr.rs2]) & 0xFF;
+                        updateNZP(t, regs[instr.rd], true);
+                        break;
+                    case OPCODES.LDR: {
+                        const addr = (regs[instr.rs1] + regs[instr.rs2]) & 0xFF;
+                        regs[instr.rd] = state.memory[addr];
+                        log += ` | T${tid}: M[${addr}]=${state.memory[addr]}`;
+                        break;
+                    }
+                    case OPCODES.STR: {
+                        const addr = (regs[instr.rs1] + regs[instr.rs2]) & 0xFF;
+                        state.memory[addr] = regs[instr.rd];
+                        log += ` | T${tid}: M[${addr}]←${regs[instr.rd]}`;
+                        break;
+                    }
+                    case OPCODES.CONST:
+                        if (instr.rd < 13) {  // Can't write special regs
+                            regs[instr.rd] = instr.imm;
+                        }
+                        break;
+                    case OPCODES.RET:
+                        state.halted = true;
+                        break;
+                }
+            }
+            
+            // Branch handling (use thread 0's NZP for simplicity)
+            if (instr.opcode === OPCODES.BR && !state.halted) {
+                const t = state.threads[0];
+                const condMet = (instr.cond & 0b100 && t.nzp.n) ||
+                               (instr.cond & 0b010 && t.nzp.z) ||
+                               (instr.cond & 0b001 && t.nzp.p);
+                if (condMet) {
+                    state.pc = state.pc + instr.offset;
+                    log += ` → Branch taken to ${state.pc + 1}`;
+                } else {
+                    log += ` → Branch not taken`;
+                }
+            }
+            
+            if (!state.halted) {
+                state.pc++;
+            }
+            state.cycle++;
+            
+            appendLog(log);
+            return !state.halted;
+        }
+        
+        function updateNZP(thread, value, signed = false) {
+            let signedVal = value;
+            if (signed && value > 127) signedVal = value - 256;
+            
+            thread.nzp.n = signedVal < 0;
+            thread.nzp.z = value === 0;
+            thread.nzp.p = signedVal > 0;
+        }
+        
+        // ============================================
+        // UI Functions
+        // ============================================
+        
+        function appendLog(msg) {
+            const log = document.getElementById('outputLog');
+            log.textContent += msg + '\n';
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function updateUI() {
+            const t = state.threads[state.currentThread];
+            
+            // Update registers
+            const grid = document.getElementById('registerGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 16; i++) {
+                const div = document.createElement('div');
+                div.className = 'register' + (i >= 13 ? ' special' : '');
+                const name = i === 13 ? '%blkIdx' : i === 14 ? '%blkDim' : i === 15 ? '%thrIdx' : `R${i}`;
+                div.innerHTML = `<div class="register-name">${name}</div>
+                                 <div class="register-value">${t.registers[i]}</div>`;
+                grid.appendChild(div);
+            }
+            
+            // Update NZP
+            document.getElementById('flagN').className = 'nzp-flag ' + (t.nzp.n ? 'active' : 'inactive');
+            document.getElementById('flagZ').className = 'nzp-flag ' + (t.nzp.z ? 'active' : 'inactive');
+            document.getElementById('flagP').className = 'nzp-flag ' + (t.nzp.p ? 'active' : 'inactive');
+            
+            // Update PC
+            document.getElementById('pcDisplay').textContent = `PC: ${state.pc}`;
+            document.getElementById('cycleCount').textContent = `Cycle: ${state.cycle}`;
+            
+            // Update memory view
+            const memGrid = document.getElementById('memoryGrid');
+            memGrid.innerHTML = '';
+            // Header row
+            memGrid.innerHTML = '<div class="memory-cell header">Addr</div>';
+            for (let i = 0; i < 7; i++) {
+                memGrid.innerHTML += `<div class="memory-cell header">+${i}</div>`;
+            }
+            // Data rows (show first 64 bytes)
+            for (let row = 0; row < 8; row++) {
+                const baseAddr = row * 8;
+                memGrid.innerHTML += `<div class="memory-cell header">${baseAddr}</div>`;
+                for (let col = 0; col < 7; col++) {
+                    const addr = baseAddr + col;
+                    memGrid.innerHTML += `<div class="memory-cell">${state.memory[addr]}</div>`;
+                }
+            }
+            
+            // Update instruction highlight
+            const instrList = document.getElementById('instructionList');
+            const lines = instrList.querySelectorAll('.instruction-line');
+            lines.forEach((line, idx) => {
+                line.classList.toggle('current', idx === state.pc && !state.halted);
+            });
+            
+            // Update status
+            document.getElementById('statusText').textContent = 
+                state.halted ? 'Halted (RET reached)' : 
+                state.running ? 'Running...' : 'Ready';
+        }
+        
+        function renderInstructions() {
+            const container = document.getElementById('instructionList');
+            container.innerHTML = '';
+            state.instructions.forEach((instr, idx) => {
+                const div = document.createElement('div');
+                div.className = 'instruction-line' + (idx === 0 ? ' current' : '');
+                div.innerHTML = `<span class="addr">${idx}:</span>
+                                 <span class="hex">0x${instr.hex.toString(16).toUpperCase().padStart(4, '0')}</span>
+                                 <span class="asm">${instr.asm}</span>`;
+                container.appendChild(div);
+            });
+            document.getElementById('instructionView').style.display = 'block';
+        }
+        
+        // ============================================
+        // Event Handlers
+        // ============================================
+        
+        document.getElementById('btnAssemble').addEventListener('click', () => {
+            try {
+                const code = document.getElementById('codeEditor').value;
+                const result = assemble(code);
+                state.instructions = result.instructions;
+                state.labels = result.labels;
+                state.pc = 0;
+                state.cycle = 0;
+                state.halted = false;
+                initThreads();
+                initMemory();
+                
+                renderInstructions();
+                updateUI();
+                
+                appendLog(`\n=== Assembled ${state.instructions.length} instructions ===`);
+                
+                document.getElementById('btnStep').disabled = false;
+                document.getElementById('btnRun').disabled = false;
+                document.getElementById('btnReset').disabled = false;
+                
+            } catch (e) {
+                appendLog(`ERROR: ${e.message}`);
+            }
+        });
+        
+        document.getElementById('btnStep').addEventListener('click', () => {
+            if (!state.halted) {
+                executeInstruction();
+                updateUI();
+            }
+        });
+        
+        let runInterval = null;
+        document.getElementById('btnRun').addEventListener('click', () => {
+            if (state.halted) return;
+            state.running = true;
+            document.getElementById('btnRun').disabled = true;
+            document.getElementById('btnPause').disabled = false;
+            
+            const speed = 1100 - parseInt(document.getElementById('speedSlider').value);
+            runInterval = setInterval(() => {
+                if (!executeInstruction()) {
+                    clearInterval(runInterval);
+                    state.running = false;
+                    document.getElementById('btnRun').disabled = true;
+                    document.getElementById('btnPause').disabled = true;
+                    appendLog('\n=== Execution Complete ===');
+                }
+                updateUI();
+            }, speed);
+        });
+        
+        document.getElementById('btnPause').addEventListener('click', () => {
+            if (runInterval) {
+                clearInterval(runInterval);
+                runInterval = null;
+            }
+            state.running = false;
+            document.getElementById('btnRun').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+            updateUI();
+        });
+        
+        document.getElementById('btnReset').addEventListener('click', () => {
+            if (runInterval) clearInterval(runInterval);
+            state.pc = 0;
+            state.cycle = 0;
+            state.halted = false;
+            state.running = false;
+            initThreads();
+            initMemory();
+            updateUI();
+            appendLog('\n=== Reset ===');
+            document.getElementById('btnStep').disabled = false;
+            document.getElementById('btnRun').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+        });
+        
+        document.getElementById('btnClearLog').addEventListener('click', () => {
+            document.getElementById('outputLog').textContent = '';
+        });
+        
+        document.getElementById('exampleSelect').addEventListener('change', (e) => {
+            if (e.target.value && EXAMPLES[e.target.value]) {
+                document.getElementById('codeEditor').value = EXAMPLES[e.target.value];
+                e.target.value = '';
+            }
+        });
+        
+        // Thread selector
+        document.getElementById('threadSelector').addEventListener('click', (e) => {
+            if (e.target.classList.contains('thread-btn')) {
+                document.querySelectorAll('.thread-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                state.currentThread = parseInt(e.target.dataset.tid);
+                updateUI();
+            }
+        });
+        
+        // Initialize
+        initThreads();
+        initMemory();
+        updateUI();
+    </script>
+</body>
+</html>

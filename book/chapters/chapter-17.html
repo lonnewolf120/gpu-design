@@ -1,40 +1,871 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 17: Designing Your First GPU Core | Create Your Own GPU</title>
+    <title>Chapter 17: GPU Core Design | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .file-header { background: #2d2d2d; color: #9cdcfe; padding: 8px 16px; border-radius: 8px 8px 0 0; font-size: 12px; font-family: monospace; margin-bottom: -20px; }
+        .arch-diagram { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 30px; border-radius: 12px; margin: 20px 0; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-16.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-16.html">← Previous: RTL Fundamentals</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-18.html">Next →</a>
+            <a href="chapter-18.html">Next: Multi-Core Design →</a>
         </div>
 
-        <h1>Chapter 17: Designing Your First GPU Core</h1>
-        <div style="color: #999; margin: 20px 0;">IV: Hardware Implementation • Reading time: ~60 min</div>
+        <h1>Chapter 17: GPU Core Design</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part IV: RTL Implementation</span>
+            <span>Reading time: ~75 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>The GPU core is where computation happens. Each core in tiny-gpu can execute one block of threads, with dedicated resources for each thread. This chapter provides a deep dive into the core's architecture, walking through each submodule and how they interconnect.</p>
+
+        <h2>17.1 Core Architecture Overview</h2>
+
+        <div class="arch-diagram">
+            <div class="mermaid">
+graph TB
+    subgraph "Core Module"
+        SCHED["Scheduler<br/>FSM Control"]
+        FETCH["Fetcher<br/>Instruction Load"]
+        DEC["Decoder<br/>Instruction Parse"]
         
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Designing Your First GPU Core</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        subgraph "Per-Thread Resources (×N)"
+            PC["PC Unit"]
+            REG["Register File<br/>16 × 8-bit"]
+            ALU["ALU<br/>+, -, ×, ÷"]
+            LSU["LSU<br/>Load/Store"]
+        end
+        
+        SCHED --> FETCH
+        FETCH --> DEC
+        DEC --> PC
+        DEC --> REG
+        DEC --> ALU
+        DEC --> LSU
+        
+        PC --> SCHED
+        ALU --> REG
+        LSU --> REG
+    end
+    
+    PMEM["Program<br/>Memory"] <--> FETCH
+    DMEM["Data<br/>Memory"] <--> LSU
+    
+    style SCHED fill:#fff3e0,stroke:#f57c00
+    style FETCH fill:#e3f2fd,stroke:#1976d2
+    style DEC fill:#e3f2fd,stroke:#1976d2
+    style PC fill:#e8f5e9,stroke:#388e3c
+    style REG fill:#e8f5e9,stroke:#388e3c
+    style ALU fill:#e8f5e9,stroke:#388e3c
+    style LSU fill:#e8f5e9,stroke:#388e3c
+            </div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-16.html">← Previous</a>
+        <h3>17.1.1 Core Parameters</h3>
+
+        <table>
+            <thead>
+                <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>THREADS_PER_BLOCK</td><td>4</td><td>Maximum threads per block this core can handle</td></tr>
+                <tr><td>DATA_MEM_ADDR_BITS</td><td>8</td><td>Address width for data memory (256 locations)</td></tr>
+                <tr><td>DATA_MEM_DATA_BITS</td><td>8</td><td>Data width for data memory (8-bit values)</td></tr>
+                <tr><td>PROGRAM_MEM_ADDR_BITS</td><td>8</td><td>Address width for program memory</td></tr>
+                <tr><td>PROGRAM_MEM_DATA_BITS</td><td>16</td><td>Instruction width (16-bit)</td></tr>
+            </tbody>
+        </table>
+
+        <h3>17.1.2 Core Interface</h3>
+
+        <div class="file-header">src/core.sv - Interface</div>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">core</span> #(
+    <span class="keyword">parameter</span> DATA_MEM_ADDR_BITS = <span class="number">8</span>,
+    <span class="keyword">parameter</span> DATA_MEM_DATA_BITS = <span class="number">8</span>,
+    <span class="keyword">parameter</span> PROGRAM_MEM_ADDR_BITS = <span class="number">8</span>,
+    <span class="keyword">parameter</span> PROGRAM_MEM_DATA_BITS = <span class="number">16</span>,
+    <span class="keyword">parameter</span> THREADS_PER_BLOCK = <span class="number">4</span>
+) (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+
+    <span class="comment">// Kernel Execution Control</span>
+    <span class="keyword">input</span> <span class="keyword">wire</span> start,           <span class="comment">// Begin processing assigned block</span>
+    <span class="keyword">output</span> <span class="keyword">wire</span> done,            <span class="comment">// Block execution complete</span>
+
+    <span class="comment">// Block Metadata (from Dispatcher)</span>
+    <span class="keyword">input</span> <span class="keyword">wire</span> [7:0] block_id,                        <span class="comment">// Which block to process</span>
+    <span class="keyword">input</span> <span class="keyword">wire</span> [$clog2(THREADS_PER_BLOCK):0] thread_count,  <span class="comment">// Active threads</span>
+
+    <span class="comment">// Program Memory Interface (single channel)</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span> program_mem_read_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [PROGRAM_MEM_ADDR_BITS-1:0] program_mem_read_address,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> program_mem_read_ready,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [PROGRAM_MEM_DATA_BITS-1:0] program_mem_read_data,
+
+    <span class="comment">// Data Memory Interface (one channel per thread)</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span> [THREADS_PER_BLOCK-1:0] data_mem_read_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [DATA_MEM_ADDR_BITS-1:0] data_mem_read_address [THREADS_PER_BLOCK-1:0],
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [THREADS_PER_BLOCK-1:0] data_mem_read_ready,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [DATA_MEM_DATA_BITS-1:0] data_mem_read_data [THREADS_PER_BLOCK-1:0],
+    <span class="keyword">output</span> <span class="keyword">reg</span> [THREADS_PER_BLOCK-1:0] data_mem_write_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [DATA_MEM_ADDR_BITS-1:0] data_mem_write_address [THREADS_PER_BLOCK-1:0],
+    <span class="keyword">output</span> <span class="keyword">reg</span> [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [THREADS_PER_BLOCK-1:0],
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [THREADS_PER_BLOCK-1:0] data_mem_write_ready
+);
+</code>
+        </div>
+
+        <h2>17.2 The Scheduler</h2>
+
+        <p>The scheduler orchestrates the execution pipeline through a 6-state FSM:</p>
+
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE : reset
+    IDLE --> FETCH : start
+    FETCH --> DECODE : fetcher_done
+    DECODE --> REQUEST : always
+    REQUEST --> WAIT : mem_op
+    REQUEST --> EXECUTE : no_mem_op
+    WAIT --> EXECUTE : mem_ready
+    EXECUTE --> UPDATE : always
+    UPDATE --> FETCH : !ret
+    UPDATE --> IDLE : ret
+        </div>
+
+        <h3>17.2.1 State Descriptions</h3>
+
+        <table>
+            <thead>
+                <tr><th>State</th><th>Value</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>IDLE</td><td>3'b000</td><td>Wait for start signal from dispatcher</td></tr>
+                <tr><td>FETCH</td><td>3'b001</td><td>Request instruction from program memory</td></tr>
+                <tr><td>DECODE</td><td>3'b010</td><td>Parse instruction, generate control signals</td></tr>
+                <tr><td>REQUEST</td><td>3'b011</td><td>Read register operands, issue memory requests</td></tr>
+                <tr><td>WAIT</td><td>3'b100</td><td>Wait for memory read/write completion</td></tr>
+                <tr><td>EXECUTE</td><td>3'b101</td><td>ALU computes result</td></tr>
+                <tr><td>UPDATE</td><td>3'b110</td><td>Write results to registers, update PC</td></tr>
+            </tbody>
+        </table>
+
+        <h3>17.2.2 Scheduler Implementation</h3>
+
+        <div class="file-header">src/scheduler.sv (key sections)</div>
+        <div class="code-block">
+<code><span class="keyword">localparam</span> IDLE    = <span class="number">3'b000</span>,
+           FETCH   = <span class="number">3'b001</span>,
+           DECODE  = <span class="number">3'b010</span>,
+           REQUEST = <span class="number">3'b011</span>,
+           WAIT    = <span class="number">3'b100</span>,
+           EXECUTE = <span class="number">3'b101</span>,
+           UPDATE  = <span class="number">3'b110</span>;
+
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+        core_state &lt;= IDLE;
+        current_pc &lt;= <span class="number">8'b0</span>;
+        done_reg &lt;= <span class="number">1'b0</span>;
+    <span class="keyword">end</span> <span class="keyword">else begin</span>
+        <span class="keyword">case</span> (core_state)
+            IDLE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (start) <span class="keyword">begin</span>
+                    core_state &lt;= FETCH;
+                    done_reg &lt;= <span class="number">1'b0</span>;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            FETCH: <span class="keyword">begin</span>
+                <span class="comment">// Wait for fetcher to complete</span>
+                <span class="keyword">if</span> (fetcher_state == FETCHER_DONE)
+                    core_state &lt;= DECODE;
+            <span class="keyword">end</span>
+            
+            DECODE: core_state &lt;= REQUEST;
+            
+            REQUEST: <span class="keyword">begin</span>
+                <span class="comment">// Skip WAIT if no memory operation needed</span>
+                <span class="keyword">if</span> (decoded_mem_read_enable || decoded_mem_write_enable)
+                    core_state &lt;= WAIT;
+                <span class="keyword">else</span>
+                    core_state &lt;= EXECUTE;
+            <span class="keyword">end</span>
+            
+            WAIT: <span class="keyword">begin</span>
+                <span class="comment">// Check all LSUs are done</span>
+                <span class="keyword">if</span> (all_lsu_ready)
+                    core_state &lt;= EXECUTE;
+            <span class="keyword">end</span>
+            
+            EXECUTE: core_state &lt;= UPDATE;
+            
+            UPDATE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (decoded_ret) <span class="keyword">begin</span>
+                    core_state &lt;= IDLE;
+                    done_reg &lt;= <span class="number">1'b1</span>;
+                <span class="keyword">end</span> <span class="keyword">else begin</span>
+                    core_state &lt;= FETCH;
+                    current_pc &lt;= next_pc[<span class="number">0</span>];  <span class="comment">// Use PC from thread 0</span>
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+        <span class="keyword">endcase</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h2>17.3 The Fetcher</h2>
+
+        <p>The fetcher retrieves instructions from program memory:</p>
+
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">fetcher</span> #(
+    <span class="keyword">parameter</span> PROGRAM_MEM_ADDR_BITS = <span class="number">8</span>,
+    <span class="keyword">parameter</span> PROGRAM_MEM_DATA_BITS = <span class="number">16</span>
+) (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [2:0] core_state,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] current_pc,
+    
+    <span class="comment">// Memory interface</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span> mem_read_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [PROGRAM_MEM_ADDR_BITS-1:0] mem_read_address,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> mem_read_ready,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [PROGRAM_MEM_DATA_BITS-1:0] mem_read_data,
+    
+    <span class="keyword">output</span> <span class="keyword">reg</span> [1:0] fetcher_state,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [15:0] instruction
+);
+
+<span class="keyword">localparam</span> IDLE = <span class="number">2'b00</span>, REQUESTING = <span class="number">2'b01</span>, DONE = <span class="number">2'b10</span>;
+
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+        fetcher_state &lt;= IDLE;
+        mem_read_valid &lt;= <span class="number">0</span>;
+    <span class="keyword">end</span> <span class="keyword">else begin</span>
+        <span class="keyword">case</span> (fetcher_state)
+            IDLE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (core_state == FETCH) <span class="keyword">begin</span>
+                    mem_read_valid &lt;= <span class="number">1</span>;
+                    mem_read_address &lt;= current_pc;
+                    fetcher_state &lt;= REQUESTING;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            REQUESTING: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (mem_read_ready) <span class="keyword">begin</span>
+                    instruction &lt;= mem_read_data;
+                    mem_read_valid &lt;= <span class="number">0</span>;
+                    fetcher_state &lt;= DONE;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            DONE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (core_state != FETCH)
+                    fetcher_state &lt;= IDLE;
+            <span class="keyword">end</span>
+        <span class="keyword">endcase</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>17.4 The Decoder</h2>
+
+        <p>The decoder parses 16-bit instructions into control signals:</p>
+
+        <h3>17.4.1 Instruction Format</h3>
+
+        <div class="code-block">
+<code><span class="comment">// 16-bit instruction format</span>
+// [15:12] Opcode
+// [11:8]  RD (destination register)
+// [7:4]   RS (source register 1) or immediate high
+// [3:0]   RT (source register 2) or immediate low
+
+<span class="comment">// For CONST instruction:</span>
+// [15:12] 0111 (CONST opcode)
+// [11:8]  RD
+// [7:0]   8-bit immediate value
+
+<span class="comment">// For BRnzp instruction:</span>
+// [15:12] 1001 (BR opcode)
+// [11:9]  NZP condition bits
+// [8:0]   PC offset
+</code>
+        </div>
+
+        <h3>17.4.2 Decoder Control Signals</h3>
+
+        <table>
+            <thead>
+                <tr><th>Signal</th><th>Width</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>decoded_reg_write_enable</td><td>1</td><td>Write result to register</td></tr>
+                <tr><td>decoded_mem_read_enable</td><td>1</td><td>Issue memory read (LDR)</td></tr>
+                <tr><td>decoded_mem_write_enable</td><td>1</td><td>Issue memory write (STR)</td></tr>
+                <tr><td>decoded_nzp_write_enable</td><td>1</td><td>Update NZP flags (CMP)</td></tr>
+                <tr><td>decoded_reg_input_mux</td><td>2</td><td>Select reg write source (ALU/LSU/IMM)</td></tr>
+                <tr><td>decoded_alu_arithmetic_mux</td><td>2</td><td>Select ALU op (ADD/SUB/MUL/DIV)</td></tr>
+                <tr><td>decoded_alu_output_mux</td><td>1</td><td>ALU mode (arithmetic/compare)</td></tr>
+                <tr><td>decoded_pc_mux</td><td>1</td><td>PC update source (sequential/branch)</td></tr>
+                <tr><td>decoded_ret</td><td>1</td><td>Return instruction flag</td></tr>
+            </tbody>
+        </table>
+
+        <h2>17.5 Per-Thread Resources</h2>
+
+        <p>Each thread in the core has its own execution resources, created using generate blocks:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Generate per-thread resources</span>
+<span class="keyword">genvar</span> i;
+<span class="keyword">generate</span>
+    <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; THREADS_PER_BLOCK; i = i + <span class="number">1</span>) <span class="keyword">begin</span> : threads
+        
+        <span class="comment">// ALU - Arithmetic operations</span>
+        <span class="type">alu</span> alu_instance (
+            .clk(clk),
+            .reset(reset),
+            .enable(i &lt; thread_count),  <span class="comment">// Enable only active threads</span>
+            .core_state(core_state),
+            .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
+            .decoded_alu_output_mux(decoded_alu_output_mux),
+            .rs(rs[i]),
+            .rt(rt[i]),
+            .alu_out(alu_out[i])
+        );
+
+        <span class="comment">// LSU - Memory operations</span>
+        <span class="type">lsu</span> lsu_instance (
+            .clk(clk),
+            .reset(reset),
+            .enable(i &lt; thread_count),
+            .core_state(core_state),
+            .decoded_mem_read_enable(decoded_mem_read_enable),
+            .decoded_mem_write_enable(decoded_mem_write_enable),
+            .rs(rs[i]),
+            .rt(rt[i]),
+            <span class="comment">// Memory interface connections...</span>
+            .lsu_out(lsu_out[i]),
+            .lsu_state(lsu_state[i])
+        );
+
+        <span class="comment">// Register File - 16 registers per thread</span>
+        <span class="type">registers</span> #(
+            .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
+            .THREAD_ID(i),  <span class="comment">// Each thread knows its ID</span>
+            .DATA_BITS(DATA_MEM_DATA_BITS)
+        ) registers_instance (
+            .clk(clk),
+            .reset(reset),
+            .enable(i &lt; thread_count),
+            .block_id(block_id),
+            .core_state(core_state),
+            .decoded_rd_address(decoded_rd_address),
+            .decoded_rs_address(decoded_rs_address),
+            .decoded_rt_address(decoded_rt_address),
+            .alu_out(alu_out[i]),
+            .lsu_out(lsu_out[i]),
+            .rs(rs[i]),
+            .rt(rt[i])
+        );
+
+        <span class="comment">// PC Unit - Program counter per thread</span>
+        <span class="type">pc</span> pc_instance (
+            .clk(clk),
+            .reset(reset),
+            .enable(i &lt; thread_count),
+            .core_state(core_state),
+            .current_pc(current_pc),
+            .decoded_pc_mux(decoded_pc_mux),
+            .decoded_nzp(decoded_nzp),
+            .decoded_immediate(decoded_immediate),
+            .alu_out(alu_out[i]),
+            .next_pc(next_pc[i])
+        );
+    <span class="keyword">end</span>
+<span class="keyword">endgenerate</span>
+</code>
+        </div>
+
+        <h2>17.6 Load/Store Unit (LSU)</h2>
+
+        <p>The LSU handles memory read and write operations:</p>
+
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">lsu</span> (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    <span class="keyword">input</span> <span class="keyword">wire</span> enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [2:0] core_state,
+    <span class="keyword">input</span> <span class="keyword">reg</span> decoded_mem_read_enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> decoded_mem_write_enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] rs,  <span class="comment">// Data to store</span>
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] rt,  <span class="comment">// Address</span>
+    
+    <span class="comment">// Memory interface</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span> mem_read_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] mem_read_address,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> mem_read_ready,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [7:0] mem_read_data,
+    <span class="keyword">output</span> <span class="keyword">reg</span> mem_write_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] mem_write_address,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] mem_write_data,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> mem_write_ready,
+    
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] lsu_out,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [1:0] lsu_state
+);
+
+<span class="keyword">localparam</span> IDLE = <span class="number">2'b00</span>, REQUESTING = <span class="number">2'b01</span>, DONE = <span class="number">2'b10</span>;
+
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+        lsu_state &lt;= IDLE;
+        mem_read_valid &lt;= <span class="number">0</span>;
+        mem_write_valid &lt;= <span class="number">0</span>;
+    <span class="keyword">end</span> <span class="keyword">else if</span> (enable) <span class="keyword">begin</span>
+        <span class="keyword">case</span> (lsu_state)
+            IDLE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (core_state == REQUEST) <span class="keyword">begin</span>
+                    <span class="keyword">if</span> (decoded_mem_read_enable) <span class="keyword">begin</span>
+                        mem_read_valid &lt;= <span class="number">1</span>;
+                        mem_read_address &lt;= rs;  <span class="comment">// LDR Rd, Rs</span>
+                        lsu_state &lt;= REQUESTING;
+                    <span class="keyword">end</span> <span class="keyword">else if</span> (decoded_mem_write_enable) <span class="keyword">begin</span>
+                        mem_write_valid &lt;= <span class="number">1</span>;
+                        mem_write_address &lt;= rt;  <span class="comment">// STR Rs, Rt</span>
+                        mem_write_data &lt;= rs;
+                        lsu_state &lt;= REQUESTING;
+                    <span class="keyword">end</span>
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            REQUESTING: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (mem_read_ready) <span class="keyword">begin</span>
+                    lsu_out &lt;= mem_read_data;
+                    mem_read_valid &lt;= <span class="number">0</span>;
+                    lsu_state &lt;= DONE;
+                <span class="keyword">end</span> <span class="keyword">else if</span> (mem_write_ready) <span class="keyword">begin</span>
+                    mem_write_valid &lt;= <span class="number">0</span>;
+                    lsu_state &lt;= DONE;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            DONE: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (core_state == UPDATE)
+                    lsu_state &lt;= IDLE;
+            <span class="keyword">end</span>
+        <span class="keyword">endcase</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>17.7 Data Flow Example</h2>
+
+        <p>Let's trace execution of <code>ADD R6, R4, R5</code>:</p>
+
+        <div class="mermaid">
+sequenceDiagram
+    participant SCHED as Scheduler
+    participant FETCH as Fetcher
+    participant DEC as Decoder
+    participant REG as Registers
+    participant ALU as ALU
+    
+    SCHED->>FETCH: FETCH state
+    FETCH->>FETCH: Request instruction
+    FETCH-->>SCHED: instruction ready
+    
+    SCHED->>DEC: DECODE state
+    DEC->>DEC: Parse: opcode=ADD, rd=6, rs=4, rt=5
+    DEC-->>SCHED: Control signals ready
+    
+    SCHED->>REG: REQUEST state
+    REG->>REG: Read R4 → rs, R5 → rt
+    
+    SCHED->>ALU: EXECUTE state
+    ALU->>ALU: alu_out = rs + rt
+    
+    SCHED->>REG: UPDATE state
+    REG->>REG: R6 ← alu_out
+        </div>
+
+        <h2>17.8 Complete Kernel Walkthrough: Matrix Addition</h2>
+
+        <p>Let's trace through the complete execution of the <strong>matadd kernel</strong> from the test suite. This kernel adds two 8-element vectors: C[i] = A[i] + B[i].</p>
+
+        <h3>17.8.1 The Kernel Program</h3>
+
+        <div class="info-box">
+            <p><strong>Memory Layout:</strong></p>
+            <ul>
+                <li><strong>Matrix A:</strong> addresses 0–7 (values: 0, 1, 2, 3, 4, 5, 6, 7)</li>
+                <li><strong>Matrix B:</strong> addresses 8–15 (values: 0, 1, 2, 3, 4, 5, 6, 7)</li>
+                <li><strong>Matrix C:</strong> addresses 16–23 (output)</li>
+            </ul>
+            <p><strong>Threads:</strong> 8 threads, each computing one element of C</p>
+        </div>
+
+        <div class="code-block">
+<code><span class="comment">; Matrix Addition Kernel - Each thread computes C[i] = A[i] + B[i]</span>
+
+<span class="comment">; Step 1: Calculate thread's global index i</span>
+MUL  R0, %blockIdx, %blockDim   <span class="comment">; R0 = blockIdx × blockDim</span>
+ADD  R0, R0, %threadIdx         <span class="comment">; R0 = i = blockIdx × blockDim + threadIdx</span>
+
+<span class="comment">; Step 2: Load base addresses</span>
+CONST R1, #0                    <span class="comment">; baseA = 0 (matrix A at address 0)</span>
+CONST R2, #8                    <span class="comment">; baseB = 8 (matrix B at address 8)</span>
+CONST R3, #16                   <span class="comment">; baseC = 16 (matrix C at address 16)</span>
+
+<span class="comment">; Step 3: Load A[i]</span>
+ADD  R4, R1, R0                 <span class="comment">; R4 = addr(A[i]) = baseA + i</span>
+LDR  R4, R4                     <span class="comment">; R4 = A[i] (load from memory)</span>
+
+<span class="comment">; Step 4: Load B[i]</span>
+ADD  R5, R2, R0                 <span class="comment">; R5 = addr(B[i]) = baseB + i</span>
+LDR  R5, R5                     <span class="comment">; R5 = B[i] (load from memory)</span>
+
+<span class="comment">; Step 5: Compute C[i] = A[i] + B[i]</span>
+ADD  R6, R4, R5                 <span class="comment">; R6 = A[i] + B[i]</span>
+
+<span class="comment">; Step 6: Store result</span>
+ADD  R7, R3, R0                 <span class="comment">; R7 = addr(C[i]) = baseC + i</span>
+STR  R7, R6                     <span class="comment">; store C[i] to memory</span>
+
+<span class="comment">; Step 7: End kernel</span>
+RET                             <span class="comment">; return (all threads)</span>
+</code>
+        </div>
+
+        <h3>17.8.2 Execution Timeline (Thread 3)</h3>
+
+        <p>Let's trace Thread 3 (threadIdx=3) step by step:</p>
+
+        <div class="mermaid">
+sequenceDiagram
+    participant PC as PC Unit
+    participant SCHED as Scheduler
+    participant REG as Registers
+    participant ALU as ALU
+    participant LSU as LSU
+    participant MEM as Data Memory
+
+    Note over PC,MEM: Instruction 1: MUL R0, %blockIdx, %blockDim
+    SCHED->>REG: Read R13 (blockIdx=0), R14 (blockDim=8)
+    REG-->>ALU: rs=0, rt=8
+    ALU->>REG: R0 = 0 × 8 = 0
+
+    Note over PC,MEM: Instruction 2: ADD R0, R0, %threadIdx
+    SCHED->>REG: Read R0 (0), R15 (threadIdx=3)
+    REG-->>ALU: rs=0, rt=3
+    ALU->>REG: R0 = 0 + 3 = 3
+
+    Note over PC,MEM: Instruction 3: CONST R1, #0
+    ALU->>REG: R1 = 0
+
+    Note over PC,MEM: Instruction 4: CONST R2, #8
+    ALU->>REG: R2 = 8
+
+    Note over PC,MEM: Instruction 5: CONST R3, #16
+    ALU->>REG: R3 = 16
+
+    Note over PC,MEM: Instruction 6: ADD R4, R1, R0
+    SCHED->>REG: Read R1 (0), R0 (3)
+    ALU->>REG: R4 = 0 + 3 = 3
+
+    Note over PC,MEM: Instruction 7: LDR R4, R4
+    LSU->>MEM: Read address 3
+    MEM-->>LSU: value = 3 (A[3])
+    LSU->>REG: R4 = 3
+
+    Note over PC,MEM: Instruction 8: ADD R5, R2, R0
+    SCHED->>REG: Read R2 (8), R0 (3)
+    ALU->>REG: R5 = 8 + 3 = 11
+
+    Note over PC,MEM: Instruction 9: LDR R5, R5
+    LSU->>MEM: Read address 11
+    MEM-->>LSU: value = 3 (B[3])
+    LSU->>REG: R5 = 3
+
+    Note over PC,MEM: Instruction 10: ADD R6, R4, R5
+    SCHED->>REG: Read R4 (3), R5 (3)
+    ALU->>REG: R6 = 3 + 3 = 6
+
+    Note over PC,MEM: Instruction 11: ADD R7, R3, R0
+    SCHED->>REG: Read R3 (16), R0 (3)
+    ALU->>REG: R7 = 16 + 3 = 19
+
+    Note over PC,MEM: Instruction 12: STR R7, R6
+    LSU->>MEM: Write address 19 = 6
+    MEM-->>LSU: Write complete
+
+    Note over PC,MEM: Instruction 13: RET
+    SCHED->>SCHED: Thread 3 complete
+        </div>
+
+        <h3>17.8.3 Register State Trace</h3>
+
+        <table>
+            <thead>
+                <tr><th>After Instruction</th><th>R0</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>R5</th><th>R6</th><th>R7</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>MUL R0, %blockIdx, %blockDim</td><td><strong>0</strong></td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>ADD R0, R0, %threadIdx</td><td><strong>3</strong></td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>CONST R1, #0</td><td>3</td><td><strong>0</strong></td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>CONST R2, #8</td><td>3</td><td>0</td><td><strong>8</strong></td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>CONST R3, #16</td><td>3</td><td>0</td><td>8</td><td><strong>16</strong></td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>ADD R4, R1, R0</td><td>3</td><td>0</td><td>8</td><td>16</td><td><strong>3</strong></td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>LDR R4, R4 (load A[3])</td><td>3</td><td>0</td><td>8</td><td>16</td><td><strong>3</strong></td><td>-</td><td>-</td><td>-</td></tr>
+                <tr><td>ADD R5, R2, R0</td><td>3</td><td>0</td><td>8</td><td>16</td><td>3</td><td><strong>11</strong></td><td>-</td><td>-</td></tr>
+                <tr><td>LDR R5, R5 (load B[3])</td><td>3</td><td>0</td><td>8</td><td>16</td><td>3</td><td><strong>3</strong></td><td>-</td><td>-</td></tr>
+                <tr><td>ADD R6, R4, R5</td><td>3</td><td>0</td><td>8</td><td>16</td><td>3</td><td>3</td><td><strong>6</strong></td><td>-</td></tr>
+                <tr><td>ADD R7, R3, R0</td><td>3</td><td>0</td><td>8</td><td>16</td><td>3</td><td>3</td><td>6</td><td><strong>19</strong></td></tr>
+                <tr><td>STR R7, R6 (store to addr 19)</td><td>3</td><td>0</td><td>8</td><td>16</td><td>3</td><td>3</td><td>6</td><td>19</td></tr>
+            </tbody>
+        </table>
+
+        <h3>17.8.4 Binary Encoding</h3>
+
+        <p>Here's how the first few instructions are encoded as 16-bit words:</p>
+
+        <table>
+            <thead>
+                <tr><th>Instruction</th><th>Binary</th><th>Hex</th><th>Fields</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>MUL R0, %blockIdx, %blockDim</td><td>0101 0000 1101 1110</td><td>0x50DE</td><td>op=0101, rd=0000, rs=1101(R13), rt=1110(R14)</td></tr>
+                <tr><td>ADD R0, R0, %threadIdx</td><td>0011 0000 0000 1111</td><td>0x300F</td><td>op=0011, rd=0000, rs=0000, rt=1111(R15)</td></tr>
+                <tr><td>CONST R1, #0</td><td>1001 0001 0000 0000</td><td>0x9100</td><td>op=1001, rd=0001, imm=00000000</td></tr>
+                <tr><td>CONST R2, #8</td><td>1001 0010 0000 1000</td><td>0x9208</td><td>op=1001, rd=0010, imm=00001000</td></tr>
+                <tr><td>LDR R4, R4</td><td>0111 0100 0100 0000</td><td>0x7440</td><td>op=0111, rd=0100, rs=0100, rt=0000</td></tr>
+                <tr><td>STR R7, R6</td><td>1000 0000 0111 0110</td><td>0x8076</td><td>op=1000, rs=0111, rt=0110</td></tr>
+                <tr><td>RET</td><td>1111 0000 0000 0000</td><td>0xF000</td><td>op=1111</td></tr>
+            </tbody>
+        </table>
+
+        <h2>17.9 Kernel Walkthrough: Matrix Multiplication</h2>
+
+        <p>The matrix multiplication kernel is more complex, implementing a nested loop to compute C = A × B for 2×2 matrices.</p>
+
+        <h3>17.9.1 Algorithm Overview</h3>
+
+        <div class="mermaid">
+flowchart LR
+    subgraph "For each output element C[row,col]"
+        A["Initialize acc = 0"] --> B["For k = 0 to N-1"]
+        B --> C["Load A[row, k]"]
+        C --> D["Load B[k, col]"]
+        D --> E["acc += A × B"]
+        E --> F{k < N?}
+        F -->|Yes| B
+        F -->|No| G["Store C[row,col] = acc"]
+    end
+        </div>
+
+        <h3>17.9.2 The Matmul Kernel Code</h3>
+
+        <div class="code-block">
+<code><span class="comment">; Matrix Multiplication Kernel (2×2)</span>
+<span class="comment">; Memory: A at 0-3, B at 4-7, C at 8-11</span>
+<span class="comment">; 4 threads compute 4 output elements</span>
+
+<span class="comment">; Calculate global thread index</span>
+MUL  R0, %blockIdx, %blockDim   <span class="comment">; R0 = blockIdx × blockDim</span>
+ADD  R0, R0, %threadIdx         <span class="comment">; R0 = i (global index 0-3)</span>
+
+<span class="comment">; Constants</span>
+CONST R1, #1                    <span class="comment">; increment</span>
+CONST R2, #2                    <span class="comment">; N = matrix dimension</span>
+CONST R3, #0                    <span class="comment">; baseA</span>
+CONST R4, #4                    <span class="comment">; baseB</span>
+CONST R5, #8                    <span class="comment">; baseC</span>
+
+<span class="comment">; Calculate row and column from linear index</span>
+DIV  R6, R0, R2                 <span class="comment">; row = i / N</span>
+MUL  R7, R6, R2                 <span class="comment">; temp = row × N</span>
+SUB  R7, R0, R7                 <span class="comment">; col = i - temp (i % N)</span>
+
+<span class="comment">; Initialize accumulator and loop counter</span>
+CONST R8, #0                    <span class="comment">; acc = 0</span>
+CONST R9, #0                    <span class="comment">; k = 0</span>
+
+<span class="comment">; LOOP: (address 12)</span>
+  MUL  R10, R6, R2              <span class="comment">; R10 = row × N</span>
+  ADD  R10, R10, R9             <span class="comment">; R10 = row × N + k</span>
+  ADD  R10, R10, R3             <span class="comment">; R10 = addr(A[row,k]) = baseA + row×N + k</span>
+  LDR  R10, R10                 <span class="comment">; R10 = A[row,k]</span>
+  
+  MUL  R11, R9, R2              <span class="comment">; R11 = k × N</span>
+  ADD  R11, R11, R7             <span class="comment">; R11 = k × N + col</span>
+  ADD  R11, R11, R4             <span class="comment">; R11 = addr(B[k,col]) = baseB + k×N + col</span>
+  LDR  R11, R11                 <span class="comment">; R11 = B[k,col]</span>
+  
+  MUL  R12, R10, R11            <span class="comment">; R12 = A[row,k] × B[k,col]</span>
+  ADD  R8, R8, R12              <span class="comment">; acc += R12</span>
+  ADD  R9, R9, R1               <span class="comment">; k++</span>
+  CMP  R9, R2                   <span class="comment">; compare k to N</span>
+  BRn  LOOP                     <span class="comment">; if k < N, branch back</span>
+
+<span class="comment">; Store result</span>
+ADD  R9, R5, R0                 <span class="comment">; R9 = addr(C[i]) = baseC + i</span>
+STR  R9, R8                     <span class="comment">; store acc to C[i]</span>
+RET                             <span class="comment">; done</span>
+</code>
+        </div>
+
+        <h3>17.9.3 Example: Computing C[0,1] (Thread 1)</h3>
+
+        <div class="info-box">
+            <p><strong>Thread 1 computes:</strong></p>
+            <p>C[0,1] = A[0,0]×B[0,1] + A[0,1]×B[1,1] = 1×2 + 2×4 = 2 + 8 = <strong>10</strong></p>
+            <p><strong>Matrices:</strong></p>
+            <table style="width: auto; display: inline-table; margin-right: 20px;">
+                <tr><th colspan="2">A (2×2)</th></tr>
+                <tr><td>1</td><td>2</td></tr>
+                <tr><td>3</td><td>4</td></tr>
+            </table>
+            <table style="width: auto; display: inline-table; margin-right: 20px;">
+                <tr><th colspan="2">B (2×2)</th></tr>
+                <tr><td>1</td><td>2</td></tr>
+                <tr><td>3</td><td>4</td></tr>
+            </table>
+            <table style="width: auto; display: inline-table;">
+                <tr><th colspan="2">C = A×B</th></tr>
+                <tr><td>7</td><td><strong>10</strong></td></tr>
+                <tr><td>15</td><td>22</td></tr>
+            </table>
+        </div>
+
+        <h3>17.9.4 Cycle-by-Cycle Analysis</h3>
+
+        <p>For a 13-instruction matadd kernel with 8 threads:</p>
+        <ul>
+            <li><strong>Instructions per thread:</strong> 13</li>
+            <li><strong>Cycles per instruction:</strong> ~6-8 (depending on memory)</li>
+            <li><strong>Total cycles (1 block):</strong> ~80-100 cycles</li>
+        </ul>
+
+        <p>For a 27-instruction matmul kernel with 4 threads:</p>
+        <ul>
+            <li><strong>Instructions per thread:</strong> ~27 (with loop iterations)</li>
+            <li><strong>Loop iterations:</strong> 2 per thread (k = 0, 1)</li>
+            <li><strong>Total cycles (1 block):</strong> ~150-200 cycles</li>
+        </ul>
+
+        <div class="key-takeaway">
+            <p><strong>🔑 Run the Tests:</strong> Execute <code>make test_matadd</code> and <code>make test_matmul</code> to see these kernels run in the cocotb simulation. The log files show detailed cycle-by-cycle execution.</p>
+        </div>
+
+        <h2>17.10 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 17.1: Add Thread ID to ALU Output</h4>
+            <p>Modify the core to support a new instruction that returns the thread's ID (already available as THREAD_ID parameter in registers). What modules need changes?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>R15 already contains threadIdx! No changes needed - use: CONST R0, #15; ADD R0, R0, R0 won't work since R15 is read-only.</p>
+                    <p>Actually, just read R15: the register file already has threadIdx in R15. The test kernels use R15 directly (see test_matadd.py).</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 17.2: Calculate Core Resources</h4>
+            <p>For THREADS_PER_BLOCK = 8, how many instances of each module does one core contain?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <ul>
+                        <li>Scheduler: 1</li>
+                        <li>Fetcher: 1</li>
+                        <li>Decoder: 1</li>
+                        <li>ALU: 8 (one per thread)</li>
+                        <li>LSU: 8 (one per thread)</li>
+                        <li>Registers: 8 (one per thread, each with 16 × 8-bit regs)</li>
+                        <li>PC: 8 (one per thread)</li>
+                    </ul>
+                    <p>Total: 3 shared + 32 per-thread = 35 module instances</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>17.11 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🎯 Core = Scheduler + Shared Units + Per-Thread Resources:</strong> The scheduler controls execution, while each thread has its own ALU, LSU, registers, and PC.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔄 6-State FSM controls execution:</strong> IDLE→FETCH→DECODE→REQUEST→WAIT→EXECUTE→UPDATE provides clear separation of concerns.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ SIMT execution:</strong> All threads execute the same instruction but operate on different data (different register values).</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🏭 Generate blocks enable scalability:</strong> Parameterized thread count allows easy scaling of per-thread resources.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-16.html">← Previous: RTL Fundamentals</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-18.html">Next →</a>
+            <a href="chapter-18.html">Next: Multi-Core Design →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

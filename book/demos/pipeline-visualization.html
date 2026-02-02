@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Visualization - Tiny-GPU</title>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .viz-container {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 1rem 0;
+        }
+        
+        /* Pipeline Stages */
+        .pipeline-view {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .stage {
+            flex: 1;
+            min-width: 120px;
+            background: #16213e;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            border: 2px solid #0f3460;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .stage.active {
+            border-color: #e94560;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+        .stage.completed {
+            border-color: #4ade80;
+            background: linear-gradient(180deg, #16213e 0%, #1a4d1a 100%);
+        }
+        .stage-name {
+            font-weight: bold;
+            color: #e94560;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        .stage-desc {
+            color: #888;
+            font-size: 0.75rem;
+        }
+        .stage-content {
+            color: #fff;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            min-height: 40px;
+        }
+        
+        /* Arrow between stages */
+        .stage-arrow {
+            display: flex;
+            align-items: center;
+            color: #0f3460;
+            font-size: 1.5rem;
+        }
+        .stage-arrow.active {
+            color: #e94560;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        /* Control Panel */
+        .control-panel {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .control-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .control-btn.primary { background: #e94560; color: white; }
+        .control-btn.primary:hover { background: #ff6b6b; }
+        .control-btn.secondary { background: #0f3460; color: white; }
+        .control-btn.secondary:hover { background: #1a4980; }
+        
+        /* Core Visualization */
+        .core-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+        @media (max-width: 800px) {
+            .core-container { grid-template-columns: 1fr; }
+        }
+        
+        .core-box {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 1rem;
+            border: 2px solid #0f3460;
+        }
+        .core-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #0f3460;
+        }
+        .core-title {
+            font-weight: bold;
+            color: #e94560;
+        }
+        .core-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .core-status.idle { background: #333; color: #888; }
+        .core-status.running { background: #4ade80; color: #000; }
+        .core-status.waiting { background: #fbbf24; color: #000; }
+        
+        /* Thread View */
+        .thread-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+        .thread-box {
+            background: #0f3460;
+            border-radius: 4px;
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        .thread-box.active {
+            background: #e94560;
+        }
+        .thread-id {
+            color: #888;
+            font-size: 0.65rem;
+        }
+        .thread-pc {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        /* Memory Bus Animation */
+        .memory-bus {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .bus-title {
+            color: #888;
+            font-size: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .bus-animation {
+            height: 30px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .bus-packet {
+            position: absolute;
+            background: #fbbf24;
+            color: black;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            animation: movePacket 2s linear infinite;
+        }
+        @keyframes movePacket {
+            0% { left: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: calc(100% - 60px); opacity: 0; }
+        }
+        
+        /* Instruction Queue */
+        .instr-queue {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .queue-title {
+            color: #e94560;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .queue-items {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+        }
+        .queue-item {
+            background: #16213e;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            border: 1px solid #333;
+        }
+        .queue-item.current {
+            border-color: #e94560;
+            background: #2a1a3e;
+        }
+        
+        /* Timeline */
+        .timeline {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        .timeline-title {
+            color: #e94560;
+            font-weight: bold;
+        }
+        .timeline-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(12, 1fr);
+            gap: 2px;
+            font-size: 0.7rem;
+        }
+        .timeline-label {
+            color: #888;
+            padding: 0.25rem;
+        }
+        .timeline-cell {
+            padding: 0.25rem;
+            text-align: center;
+            border-radius: 2px;
+        }
+        .timeline-cell.fetch { background: #e94560; }
+        .timeline-cell.decode { background: #fbbf24; color: black; }
+        .timeline-cell.request { background: #4ade80; color: black; }
+        .timeline-cell.wait { background: #818cf8; }
+        .timeline-cell.execute { background: #22d3ee; color: black; }
+        .timeline-cell.update { background: #a855f7; }
+        .timeline-cell.empty { background: #1a1a2e; }
+        
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #888;
+        }
+        .legend-color {
+            width: 20px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        /* Info Cards */
+        .info-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        @media (max-width: 600px) {
+            .info-cards { grid-template-columns: 1fr; }
+        }
+        .info-card {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .info-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #e94560;
+        }
+        .info-label {
+            color: #888;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="../table-of-contents.html" class="nav-link">← Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="assembly-simulator.html" class="nav-link">Assembly Simulator →</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Interactive Demo</div>
+        <h1>Pipeline Visualization</h1>
+        <p class="chapter-subtitle">Watch the Tiny-GPU scheduler FSM in action</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="intro">
+            <p>This visualization shows how the Tiny-GPU scheduler processes instructions through its pipeline stages. Watch as instructions flow through FETCH → DECODE → REQUEST → WAIT → EXECUTE → UPDATE.</p>
+        </section>
+
+        <div class="viz-container">
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <button id="btnStep" class="control-btn primary">⏭️ Step</button>
+                <button id="btnRun" class="control-btn primary">▶️ Run</button>
+                <button id="btnPause" class="control-btn secondary" disabled>⏸️ Pause</button>
+                <button id="btnReset" class="control-btn secondary">🔄 Reset</button>
+                <div style="flex:1;"></div>
+                <label style="color:#888;">
+                    Speed: 
+                    <input type="range" id="speedSlider" min="100" max="2000" value="800" style="vertical-align:middle;">
+                </label>
+            </div>
+
+            <!-- Instruction Queue -->
+            <div class="instr-queue">
+                <div class="queue-title">📋 Instruction Queue</div>
+                <div class="queue-items" id="instrQueue">
+                    <div class="queue-item current">CONST R0, 0</div>
+                    <div class="queue-item">CONST R1, 16</div>
+                    <div class="queue-item">LDR R2, R0, R15</div>
+                    <div class="queue-item">LDR R3, R1, R15</div>
+                    <div class="queue-item">ADD R4, R2, R3</div>
+                    <div class="queue-item">STR R4, R2, R15</div>
+                    <div class="queue-item">RET</div>
+                </div>
+            </div>
+
+            <!-- Pipeline Stages -->
+            <div class="pipeline-view" id="pipelineView">
+                <div class="stage" id="stageFetch">
+                    <div class="stage-name">FETCH</div>
+                    <div class="stage-desc">Get instruction</div>
+                    <div class="stage-content" id="fetchContent">-</div>
+                </div>
+                <div class="stage-arrow" id="arrow1">→</div>
+                <div class="stage" id="stageDecode">
+                    <div class="stage-name">DECODE</div>
+                    <div class="stage-desc">Parse opcode</div>
+                    <div class="stage-content" id="decodeContent">-</div>
+                </div>
+                <div class="stage-arrow" id="arrow2">→</div>
+                <div class="stage" id="stageRequest">
+                    <div class="stage-name">REQUEST</div>
+                    <div class="stage-desc">Memory req</div>
+                    <div class="stage-content" id="requestContent">-</div>
+                </div>
+                <div class="stage-arrow" id="arrow3">→</div>
+                <div class="stage" id="stageWait">
+                    <div class="stage-name">WAIT</div>
+                    <div class="stage-desc">Wait memory</div>
+                    <div class="stage-content" id="waitContent">-</div>
+                </div>
+                <div class="stage-arrow" id="arrow4">→</div>
+                <div class="stage" id="stageExecute">
+                    <div class="stage-name">EXECUTE</div>
+                    <div class="stage-desc">ALU / LSU</div>
+                    <div class="stage-content" id="executeContent">-</div>
+                </div>
+                <div class="stage-arrow" id="arrow5">→</div>
+                <div class="stage" id="stageUpdate">
+                    <div class="stage-name">UPDATE</div>
+                    <div class="stage-desc">Writeback</div>
+                    <div class="stage-content" id="updateContent">-</div>
+                </div>
+            </div>
+
+            <!-- Cores -->
+            <div class="core-container">
+                <div class="core-box">
+                    <div class="core-header">
+                        <span class="core-title">🔲 Core 0</span>
+                        <span class="core-status running" id="core0Status">RUNNING</span>
+                    </div>
+                    <div class="thread-grid">
+                        <div class="thread-box active" id="core0t0">
+                            <div class="thread-id">T0</div>
+                            <div class="thread-pc" id="core0t0pc">PC: 0</div>
+                        </div>
+                        <div class="thread-box active" id="core0t1">
+                            <div class="thread-id">T1</div>
+                            <div class="thread-pc">PC: 0</div>
+                        </div>
+                        <div class="thread-box active" id="core0t2">
+                            <div class="thread-id">T2</div>
+                            <div class="thread-pc">PC: 0</div>
+                        </div>
+                        <div class="thread-box active" id="core0t3">
+                            <div class="thread-id">T3</div>
+                            <div class="thread-pc">PC: 0</div>
+                        </div>
+                    </div>
+                    <div class="memory-bus">
+                        <div class="bus-title">Memory Bus</div>
+                        <div class="bus-animation" id="core0Bus">
+                            <!-- Packets animated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="core-box">
+                    <div class="core-header">
+                        <span class="core-title">🔲 Core 1</span>
+                        <span class="core-status idle" id="core1Status">IDLE</span>
+                    </div>
+                    <div class="thread-grid">
+                        <div class="thread-box" id="core1t0">
+                            <div class="thread-id">T0</div>
+                            <div class="thread-pc">PC: -</div>
+                        </div>
+                        <div class="thread-box" id="core1t1">
+                            <div class="thread-id">T1</div>
+                            <div class="thread-pc">PC: -</div>
+                        </div>
+                        <div class="thread-box" id="core1t2">
+                            <div class="thread-id">T2</div>
+                            <div class="thread-pc">PC: -</div>
+                        </div>
+                        <div class="thread-box" id="core1t3">
+                            <div class="thread-id">T3</div>
+                            <div class="thread-pc">PC: -</div>
+                        </div>
+                    </div>
+                    <div class="memory-bus">
+                        <div class="bus-title">Memory Bus</div>
+                        <div class="bus-animation" id="core1Bus"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline">
+                <div class="timeline-header">
+                    <span class="timeline-title">📊 Pipeline Timeline</span>
+                    <span style="color:#888;font-size:0.75rem;">Cycle: <span id="cycleNum">0</span></span>
+                </div>
+                <div class="timeline-grid" id="timelineGrid">
+                    <div class="timeline-label">Instr</div>
+                    <div class="timeline-label">0</div>
+                    <div class="timeline-label">1</div>
+                    <div class="timeline-label">2</div>
+                    <div class="timeline-label">3</div>
+                    <div class="timeline-label">4</div>
+                    <div class="timeline-label">5</div>
+                    <div class="timeline-label">6</div>
+                    <div class="timeline-label">7</div>
+                    <div class="timeline-label">8</div>
+                    <div class="timeline-label">9</div>
+                    <div class="timeline-label">10</div>
+                    <div class="timeline-label">11</div>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#e94560;"></div>Fetch</div>
+                <div class="legend-item"><div class="legend-color" style="background:#fbbf24;"></div>Decode</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4ade80;"></div>Request</div>
+                <div class="legend-item"><div class="legend-color" style="background:#818cf8;"></div>Wait</div>
+                <div class="legend-item"><div class="legend-color" style="background:#22d3ee;"></div>Execute</div>
+                <div class="legend-item"><div class="legend-color" style="background:#a855f7;"></div>Update</div>
+            </div>
+
+            <!-- Stats -->
+            <div class="info-cards">
+                <div class="info-card">
+                    <div class="info-value" id="statCycles">0</div>
+                    <div class="info-label">Clock Cycles</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-value" id="statInstrs">0</div>
+                    <div class="info-label">Instructions Executed</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-value" id="statCPI">-</div>
+                    <div class="info-label">Cycles Per Instruction</div>
+                </div>
+            </div>
+        </div>
+
+        <section id="explanation" style="margin-top:2rem;">
+            <h2>Understanding the Pipeline</h2>
+            
+            <h3>Pipeline Stages Explained</h3>
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --> FETCH: Start
+    FETCH --> DECODE: instruction_ready
+    DECODE --> REQUEST: decoded
+    REQUEST --> WAIT: memory_request_sent
+    WAIT --> EXECUTE: data_ready
+    EXECUTE --> UPDATE: result_computed
+    UPDATE --> FETCH: continue
+    UPDATE --> [*]: RET
+            </div>
+            
+            <table class="port-table" style="margin-top:1rem;">
+                <thead>
+                    <tr><th>Stage</th><th>Duration</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>FETCH</td><td>1 cycle</td><td>Request instruction from program memory at PC address</td></tr>
+                    <tr><td>DECODE</td><td>1 cycle</td><td>Parse instruction into opcode, registers, and operands</td></tr>
+                    <tr><td>REQUEST</td><td>1 cycle</td><td>For LDR/STR: send request to memory controller</td></tr>
+                    <tr><td>WAIT</td><td>Variable</td><td>Wait for memory response (depends on contention)</td></tr>
+                    <tr><td>EXECUTE</td><td>1 cycle</td><td>ALU computes result or LSU processes data</td></tr>
+                    <tr><td>UPDATE</td><td>1 cycle</td><td>Write result to register file, update PC</td></tr>
+                </tbody>
+            </table>
+            
+            <h3>Key Observations</h3>
+            <ul>
+                <li><strong>Lockstep Execution:</strong> All threads execute the same instruction simultaneously</li>
+                <li><strong>Memory Latency:</strong> LDR/STR instructions require extra cycles for memory access</li>
+                <li><strong>No Pipelining:</strong> Tiny-GPU processes one instruction at a time (for simplicity)</li>
+                <li><strong>Core Independence:</strong> Multiple cores can execute different blocks in parallel</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+        
+        // Simulation State
+        const STAGES = ['fetch', 'decode', 'request', 'wait', 'execute', 'update'];
+        const STAGE_COLORS = {
+            fetch: '#e94560', decode: '#fbbf24', request: '#4ade80',
+            wait: '#818cf8', execute: '#22d3ee', update: '#a855f7'
+        };
+        
+        const INSTRUCTIONS = [
+            { asm: 'CONST R0, 0', type: 'alu', desc: 'R0 = 0' },
+            { asm: 'CONST R1, 16', type: 'alu', desc: 'R1 = 16' },
+            { asm: 'LDR R2, R0, R15', type: 'mem', desc: 'Load M[R0+tid]' },
+            { asm: 'LDR R3, R1, R15', type: 'mem', desc: 'Load M[R1+tid]' },
+            { asm: 'ADD R4, R2, R3', type: 'alu', desc: 'R4 = R2 + R3' },
+            { asm: 'STR R4, R2, R15', type: 'mem', desc: 'Store M[R2+tid]' },
+            { asm: 'RET', type: 'ret', desc: 'End' }
+        ];
+        
+        let state = {
+            cycle: 0,
+            pc: 0,
+            stageIdx: 0,
+            running: false,
+            instrCount: 0,
+            timeline: [],
+            waitCycles: 0
+        };
+        
+        let runInterval = null;
+        
+        function resetState() {
+            state = {
+                cycle: 0,
+                pc: 0,
+                stageIdx: 0,
+                running: false,
+                instrCount: 0,
+                timeline: [],
+                waitCycles: 0
+            };
+            updateUI();
+        }
+        
+        function step() {
+            if (state.pc >= INSTRUCTIONS.length) return false;
+            
+            const instr = INSTRUCTIONS[state.pc];
+            const stageName = STAGES[state.stageIdx];
+            
+            // Handle wait stage for memory ops
+            if (stageName === 'wait' && instr.type === 'mem') {
+                state.waitCycles++;
+                if (state.waitCycles < 2) {
+                    state.cycle++;
+                    recordTimeline(state.pc, stageName);
+                    updateUI();
+                    return true;
+                }
+                state.waitCycles = 0;
+            }
+            
+            // Skip request/wait for non-memory instructions
+            if (instr.type === 'alu' && (stageName === 'request' || stageName === 'wait')) {
+                state.stageIdx++;
+                if (state.stageIdx >= STAGES.length) {
+                    state.stageIdx = 0;
+                    state.pc++;
+                    state.instrCount++;
+                }
+                return step();
+            }
+            
+            // Record timeline
+            recordTimeline(state.pc, stageName);
+            
+            // Advance stage
+            state.stageIdx++;
+            if (state.stageIdx >= STAGES.length) {
+                state.stageIdx = 0;
+                state.pc++;
+                state.instrCount++;
+            }
+            
+            state.cycle++;
+            updateUI();
+            
+            return state.pc < INSTRUCTIONS.length;
+        }
+        
+        function recordTimeline(instrIdx, stage) {
+            if (!state.timeline[instrIdx]) {
+                state.timeline[instrIdx] = [];
+            }
+            state.timeline[instrIdx].push({ cycle: state.cycle, stage });
+        }
+        
+        function updateUI() {
+            // Update cycle count
+            document.getElementById('cycleNum').textContent = state.cycle;
+            document.getElementById('statCycles').textContent = state.cycle;
+            document.getElementById('statInstrs').textContent = state.instrCount;
+            document.getElementById('statCPI').textContent = state.instrCount > 0 ? 
+                (state.cycle / state.instrCount).toFixed(2) : '-';
+            
+            // Update instruction queue
+            const queueItems = document.querySelectorAll('.queue-item');
+            queueItems.forEach((item, idx) => {
+                item.classList.toggle('current', idx === state.pc);
+            });
+            
+            // Update pipeline stages
+            STAGES.forEach((stage, idx) => {
+                const stageEl = document.getElementById('stage' + stage.charAt(0).toUpperCase() + stage.slice(1));
+                const isActive = idx === state.stageIdx && state.pc < INSTRUCTIONS.length;
+                const isCompleted = idx < state.stageIdx;
+                
+                stageEl.classList.toggle('active', isActive);
+                stageEl.classList.toggle('completed', isCompleted);
+                
+                // Update stage content
+                const contentEl = document.getElementById(stage + 'Content');
+                if (isActive && state.pc < INSTRUCTIONS.length) {
+                    const instr = INSTRUCTIONS[state.pc];
+                    switch(stage) {
+                        case 'fetch':
+                            contentEl.textContent = `PC=${state.pc}`;
+                            break;
+                        case 'decode':
+                            contentEl.textContent = instr.asm;
+                            break;
+                        case 'request':
+                            contentEl.textContent = instr.type === 'mem' ? 'Mem req...' : 'Skip';
+                            break;
+                        case 'wait':
+                            contentEl.textContent = instr.type === 'mem' ? `Wait ${state.waitCycles+1}/2` : 'Skip';
+                            break;
+                        case 'execute':
+                            contentEl.textContent = instr.desc;
+                            break;
+                        case 'update':
+                            contentEl.textContent = 'PC++';
+                            break;
+                    }
+                } else {
+                    contentEl.textContent = '-';
+                }
+            });
+            
+            // Update arrows
+            for (let i = 1; i <= 5; i++) {
+                const arrow = document.getElementById('arrow' + i);
+                arrow.classList.toggle('active', i === state.stageIdx && state.pc < INSTRUCTIONS.length);
+            }
+            
+            // Update thread PCs
+            for (let t = 0; t < 4; t++) {
+                const pcEl = document.querySelector(`#core0t${t} .thread-pc`);
+                pcEl.textContent = `PC: ${state.pc}`;
+            }
+            
+            // Update timeline grid
+            updateTimeline();
+        }
+        
+        function updateTimeline() {
+            const grid = document.getElementById('timelineGrid');
+            // Clear existing rows (keep header)
+            const headerCells = 13;
+            while (grid.children.length > headerCells) {
+                grid.removeChild(grid.lastChild);
+            }
+            
+            // Add rows for each instruction
+            for (let i = 0; i <= Math.min(state.pc, INSTRUCTIONS.length - 1); i++) {
+                // Label cell
+                const labelCell = document.createElement('div');
+                labelCell.className = 'timeline-label';
+                labelCell.textContent = `I${i}`;
+                grid.appendChild(labelCell);
+                
+                // Cycle cells
+                for (let c = 0; c < 12; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'timeline-cell empty';
+                    
+                    // Check if this instruction has activity at this cycle
+                    const activity = state.timeline[i]?.find(t => t.cycle === c);
+                    if (activity) {
+                        cell.className = 'timeline-cell ' + activity.stage;
+                        cell.textContent = activity.stage.charAt(0).toUpperCase();
+                    }
+                    grid.appendChild(cell);
+                }
+            }
+        }
+        
+        // Event handlers
+        document.getElementById('btnStep').addEventListener('click', () => {
+            step();
+        });
+        
+        document.getElementById('btnRun').addEventListener('click', () => {
+            if (state.running) return;
+            state.running = true;
+            document.getElementById('btnRun').disabled = true;
+            document.getElementById('btnPause').disabled = false;
+            
+            const speed = parseInt(document.getElementById('speedSlider').value);
+            runInterval = setInterval(() => {
+                if (!step()) {
+                    clearInterval(runInterval);
+                    state.running = false;
+                    document.getElementById('btnRun').disabled = false;
+                    document.getElementById('btnPause').disabled = true;
+                }
+            }, speed);
+        });
+        
+        document.getElementById('btnPause').addEventListener('click', () => {
+            if (runInterval) {
+                clearInterval(runInterval);
+                runInterval = null;
+            }
+            state.running = false;
+            document.getElementById('btnRun').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+        });
+        
+        document.getElementById('btnReset').addEventListener('click', () => {
+            if (runInterval) {
+                clearInterval(runInterval);
+                runInterval = null;
+            }
+            resetState();
+            document.getElementById('btnRun').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+        });
+        
+        // Initialize
+        updateUI();
+    </script>
+</body>
+</html>

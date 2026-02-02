@@ -1,40 +1,587 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 13: Compiler Design and Code Generation | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .solution-toggle { background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-12.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-12.html">← Previous: Software Stack</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-14.html">Next →</a>
+            <a href="chapter-14.html">Next: Testing and Verification →</a>
         </div>
 
         <h1>Chapter 13: Compiler Design and Code Generation</h1>
-        <div style="color: #999; margin: 20px 0;">III: Software & Tooling • Reading time: ~60 min</div>
-        
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Compiler Design and Code Generation</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part III: Software and Tooling</span>
+            <span>Reading time: ~65 minutes</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-12.html">← Previous</a>
+        <h2>Introduction</h2>
+        <p>GPU compilers transform high-level kernel code (CUDA, OpenCL, HIP) into machine instructions that execute on GPU hardware. Unlike CPU compilers, GPU compilers must handle massive parallelism, manage complex memory hierarchies, and optimize for thousands of concurrent threads.</p>
+        
+        <p>This chapter covers the complete compilation pipeline, from source code parsing to binary generation, with specific focus on code generation for the tiny-gpu ISA.</p>
+
+        <h2>13.1 GPU Compiler Pipeline Overview</h2>
+        
+        <p>Modern GPU compilers follow a multi-stage pipeline that progressively lowers high-level abstractions to machine code:</p>
+
+        <div class="mermaid">
+graph TB
+    A["Source Code<br/>CUDA/OpenCL/HIP"] --> B["Front-End<br/>Parsing & AST"]
+    B --> C["IR Generation<br/>LLVM IR / PTX"]
+    C --> D["Optimization Passes<br/>Loop unroll, vectorize"]
+    D --> E["Target Lowering<br/>Register allocation"]
+    E --> F["Code Generation<br/>Machine instructions"]
+    F --> G["Binary Object<br/>Executable kernel"]
+    
+    style A fill:#e3f2fd,stroke:#1976d2
+    style B fill:#f3e5f5,stroke:#7b1fa2
+    style C fill:#fff3e0,stroke:#f57c00
+    style D fill:#ffe0b2,stroke:#ef6c00
+    style E fill:#e8f5e9,stroke:#388e3c
+    style F fill:#c8e6c9,stroke:#2e7d32
+    style G fill:#a5d6a7,stroke:#1b5e20
+        </div>
+
+        <h3>13.1.1 Front-End: Parsing and AST Construction</h3>
+        <p>The front-end parses kernel source code into an Abstract Syntax Tree (AST). For CUDA, this is handled by clang with CUDA-specific extensions. The front-end performs:</p>
+        
+        <ul>
+            <li><strong>Lexical analysis:</strong> Tokenizing source code into language constructs</li>
+            <li><strong>Syntax analysis:</strong> Building parse trees according to grammar rules</li>
+            <li><strong>Semantic analysis:</strong> Type checking, symbol resolution, scope analysis</li>
+            <li><strong>AST construction:</strong> Creating intermediate representation for optimization</li>
+        </ul>
+
+        <h3>13.1.2 IR Generation</h3>
+        <p>The AST is lowered to an Intermediate Representation (IR). Different GPU ecosystems use different IRs:</p>
+
+        <table>
+            <thead>
+                <tr><th>Vendor/Framework</th><th>IR Format</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>NVIDIA CUDA</td><td>PTX (Parallel Thread Execution)</td><td>Virtual ISA, further compiled to SASS</td></tr>
+                <tr><td>AMD ROCm</td><td>LLVM IR → AMDGPU backend</td><td>Standard LLVM with GPU-specific passes</td></tr>
+                <tr><td>Intel oneAPI</td><td>SPIR-V</td><td>Khronos standard intermediate format</td></tr>
+                <tr><td>OpenCL</td><td>SPIR-V / Vendor-specific</td><td>Portable or vendor-optimized paths</td></tr>
+            </tbody>
+        </table>
+
+        <h3>13.1.3 NVIDIA's Two-Stage Compilation</h3>
+        <p>NVIDIA uses a unique two-stage approach:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Stage 1: CUDA Source → PTX (Virtual ISA)</span>
+<span class="comment">// PTX is architecture-independent, forward-compatible</span>
+
+<span class="comment">// Stage 2: PTX → SASS (Native ISA)</span>
+<span class="comment">// SASS is specific to each GPU generation (SM version)</span>
+
+<span class="comment">// Example: Compile for multiple architectures</span>
+nvcc -arch=sm_80 -code=sm_80,sm_86,sm_89 kernel.cu
+</code>
+        </div>
+
+        <h2>13.2 Optimization Passes</h2>
+        
+        <p>GPU compilers apply numerous optimization passes to maximize performance. These passes operate at different levels of the IR:</p>
+
+        <table>
+            <thead>
+                <tr><th>Pass Category</th><th>Pass Name</th><th>Description</th><th>Performance Impact</th></tr>
+            </thead>
+            <tbody>
+                <tr><td rowspan="3">Loop Optimizations</td><td>Loop Unrolling</td><td>Replicate loop body N times</td><td>Reduce branch overhead, expose ILP</td></tr>
+                <tr><td>Loop Fusion</td><td>Combine adjacent loops</td><td>Improve data locality</td></tr>
+                <tr><td>Loop Tiling</td><td>Break loops into tiles</td><td>Better cache utilization</td></tr>
+                <tr><td rowspan="2">Vectorization</td><td>SLP Vectorization</td><td>Pack scalar ops into vector ops</td><td>Better ALU utilization</td></tr>
+                <tr><td>Load/Store Coalescing</td><td>Combine memory accesses</td><td>Maximize memory bandwidth</td></tr>
+                <tr><td rowspan="3">Scalar Optimizations</td><td>Constant Folding</td><td>Evaluate constants at compile time</td><td>Fewer runtime operations</td></tr>
+                <tr><td>Dead Code Elimination</td><td>Remove unreachable code</td><td>Smaller binary, faster dispatch</td></tr>
+                <tr><td>Strength Reduction</td><td>Replace expensive ops (MUL→SHIFT)</td><td>Lower latency operations</td></tr>
+                <tr><td rowspan="2">Register Allocation</td><td>Register Coalescing</td><td>Minimize register-to-register moves</td><td>Reduce instruction count</td></tr>
+                <tr><td>Spill Minimization</td><td>Keep values in registers</td><td>Avoid expensive memory spills</td></tr>
+            </tbody>
+        </table>
+
+        <h3>13.2.1 Loop Unrolling Example</h3>
+        <p>Loop unrolling is particularly effective for GPU kernels:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Before unrolling</span>
+<span class="keyword">for</span> (<span class="type">int</span> i = 0; i &lt; 4; i++) {
+    sum += data[base + i];
+}
+
+<span class="comment">// After unrolling (factor = 4)</span>
+sum += data[base + 0];
+sum += data[base + 1];
+sum += data[base + 2];
+sum += data[base + 3];
+<span class="comment">// Benefits: No loop overhead, better instruction scheduling</span>
+</code>
+        </div>
+
+        <h3>13.2.2 Memory Access Coalescing</h3>
+        <p>The compiler analyzes memory access patterns to enable coalesced global memory loads:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Coalesced access pattern (good)</span>
+<span class="type">int</span> idx = blockIdx.x * blockDim.x + threadIdx.x;
+<span class="type">float</span> val = data[idx];  <span class="comment">// Adjacent threads access adjacent memory</span>
+
+<span class="comment">// Strided access pattern (poor, but compiler may transpose)</span>
+<span class="type">float</span> val = data[idx * stride];  <span class="comment">// Non-coalesced, causes multiple transactions</span>
+</code>
+        </div>
+
+        <h2>13.3 Code Generation for tiny-gpu</h2>
+        
+        <p>Now let's examine how to generate code for the tiny-gpu's 11-instruction ISA. Understanding this process illuminates the core challenges of GPU code generation.</p>
+
+        <h3>13.3.1 tiny-gpu ISA Summary</h3>
+
+        <table>
+            <thead>
+                <tr><th>Opcode</th><th>Mnemonic</th><th>Format</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>0000</td><td>NOP</td><td>NOP</td><td>No operation</td></tr>
+                <tr><td>0001</td><td>ADD</td><td>ADD Rd, Rs1, Rs2</td><td>Rd = Rs1 + Rs2</td></tr>
+                <tr><td>0010</td><td>SUB</td><td>SUB Rd, Rs1, Rs2</td><td>Rd = Rs1 - Rs2</td></tr>
+                <tr><td>0011</td><td>MUL</td><td>MUL Rd, Rs1, Rs2</td><td>Rd = Rs1 × Rs2</td></tr>
+                <tr><td>0100</td><td>DIV</td><td>DIV Rd, Rs1, Rs2</td><td>Rd = Rs1 / Rs2</td></tr>
+                <tr><td>0101</td><td>LDR</td><td>LDR Rd, Rs</td><td>Rd = Mem[Rs]</td></tr>
+                <tr><td>0110</td><td>STR</td><td>STR Rs1, Rs2</td><td>Mem[Rs2] = Rs1</td></tr>
+                <tr><td>0111</td><td>CONST</td><td>CONST Rd, #imm</td><td>Rd = immediate (8-bit)</td></tr>
+                <tr><td>1000</td><td>CMP</td><td>CMP Rs1, Rs2</td><td>Set NZP flags</td></tr>
+                <tr><td>1001</td><td>BRnzp</td><td>BRnzp label</td><td>Branch on NZP condition</td></tr>
+                <tr><td>1111</td><td>RET</td><td>RET</td><td>Return / End kernel</td></tr>
+            </tbody>
+        </table>
+
+        <h3>13.3.2 IR to tiny-gpu Mapping</h3>
+        <p>The code generator maps LLVM-style IR operations to tiny-gpu instructions:</p>
+
+        <table>
+            <thead>
+                <tr><th>LLVM IR Operation</th><th>tiny-gpu Instruction</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>add i32 %a, %b</td><td>ADD</td><td>ADD R0, R1, R2</td></tr>
+                <tr><td>sub i32 %a, %b</td><td>SUB</td><td>SUB R0, R1, R2</td></tr>
+                <tr><td>mul i32 %a, %b</td><td>MUL</td><td>MUL R0, R1, R2</td></tr>
+                <tr><td>sdiv i32 %a, %b</td><td>DIV</td><td>DIV R0, R1, R2</td></tr>
+                <tr><td>load i32* %ptr</td><td>LDR</td><td>LDR R0, R1</td></tr>
+                <tr><td>store i32 %val, i32* %ptr</td><td>STR</td><td>STR R0, R1</td></tr>
+                <tr><td>icmp eq %a, %b + br</td><td>CMP + BRnzp</td><td>CMP R0, R1; BRz LABEL</td></tr>
+                <tr><td>constant i32 42</td><td>CONST</td><td>CONST R0, #42</td></tr>
+                <tr><td>ret void</td><td>RET</td><td>RET</td></tr>
+            </tbody>
+        </table>
+
+        <h3>13.3.3 Register Allocation Strategy</h3>
+        <p>tiny-gpu has 16 registers with specific purposes:</p>
+
+        <div class="info-box">
+            <strong>Register Layout:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>R0-R12:</strong> General-purpose, writable (13 registers for computation)</li>
+                <li><strong>R13:</strong> %blockIdx (read-only, block index within grid)</li>
+                <li><strong>R14:</strong> %blockDim (read-only, threads per block)</li>
+                <li><strong>R15:</strong> %threadIdx (read-only, thread index within block)</li>
+            </ul>
+        </div>
+
+        <p>Register allocation for tiny-gpu uses a simple linear scan algorithm:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Linear Scan Register Allocation (Simplified)</span>
+<span class="keyword">function</span> allocate_registers(live_intervals):
+    active = []      <span class="comment">// Currently allocated intervals</span>
+    free_regs = [R0, R1, R2, ..., R12]  <span class="comment">// Available registers</span>
+    
+    <span class="keyword">for</span> interval <span class="keyword">in</span> sorted(live_intervals, key=start_point):
+        <span class="comment">// Expire old intervals</span>
+        expire_old_intervals(active, interval.start)
+        
+        <span class="keyword">if</span> len(active) == 13:  <span class="comment">// All registers in use</span>
+            spill_at_interval(interval)  <span class="comment">// Spill to memory</span>
+        <span class="keyword">else</span>:
+            interval.reg = free_regs.pop()
+            active.append(interval)
+</code>
+        </div>
+
+        <h2>13.4 Instruction Encoding</h2>
+        
+        <p>Each tiny-gpu instruction is encoded as a 16-bit word with the following format:</p>
+
+        <div class="code-block">
+<code><span class="comment">// 16-bit Instruction Format</span>
+// [15:12]  [11:8]   [7:4]    [3:0]
+// OPCODE   DEST     SRC1     SRC2/IMM
+
+<span class="comment">// Example: ADD R0, R1, R2</span>
+// Opcode ADD = 0001
+// Dest   R0  = 0000
+// Src1   R1  = 0001
+// Src2   R2  = 0010
+// Encoding: 0001_0000_0001_0010 = 0x1012
+
+<span class="comment">// Example: CONST R5, #42</span>
+// Opcode CONST = 0111
+// Dest   R5    = 0101
+// Imm8         = 0010_1010 (42 in binary)
+// Encoding: 0111_0101_0010_1010 = 0x752A
+</code>
+        </div>
+
+        <h3>13.4.1 Encoding Examples</h3>
+
+        <table>
+            <thead>
+                <tr><th>Assembly</th><th>Binary</th><th>Hex</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>NOP</td><td>0000_0000_0000_0000</td><td>0x0000</td></tr>
+                <tr><td>ADD R0, R1, R2</td><td>0001_0000_0001_0010</td><td>0x1012</td></tr>
+                <tr><td>MUL R3, R5, R7</td><td>0011_0011_0101_0111</td><td>0x3357</td></tr>
+                <tr><td>LDR R4, R8</td><td>0101_0100_1000_0000</td><td>0x5480</td></tr>
+                <tr><td>STR R6, R9</td><td>0110_0110_1001_0000</td><td>0x6690</td></tr>
+                <tr><td>CONST R2, #16</td><td>0111_0010_0001_0000</td><td>0x7210</td></tr>
+                <tr><td>RET</td><td>1111_0000_0000_0000</td><td>0xF000</td></tr>
+            </tbody>
+        </table>
+
+        <h2>13.5 Complete Compilation Example</h2>
+        
+        <p>Let's walk through compiling a simple kernel from C to tiny-gpu machine code:</p>
+
+        <h3>13.5.1 Source Kernel (C-like)</h3>
+        <div class="code-block">
+<code><span class="comment">// Vector Addition: C[i] = A[i] + B[i]</span>
+<span class="keyword">__kernel</span> <span class="type">void</span> vector_add(
+    <span class="keyword">global</span> <span class="type">int</span>* A,    <span class="comment">// Base address passed via memory map</span>
+    <span class="keyword">global</span> <span class="type">int</span>* B,
+    <span class="keyword">global</span> <span class="type">int</span>* C
+) {
+    <span class="type">int</span> i = get_global_id(0);  <span class="comment">// blockIdx * blockDim + threadIdx</span>
+    C[i] = A[i] + B[i];
+}
+</code>
+        </div>
+
+        <h3>13.5.2 IR Representation</h3>
+        <div class="code-block">
+<code><span class="comment">; LLVM-style IR</span>
+define void @vector_add(i32* %A, i32* %B, i32* %C) {
+entry:
+    %blockIdx = call i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
+    %blockDim = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
+    %threadIdx = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+    
+    %tmp = mul i32 %blockIdx, %blockDim
+    %i = add i32 %tmp, %threadIdx
+    
+    %ptr_a = getelementptr i32, i32* %A, i32 %i
+    %ptr_b = getelementptr i32, i32* %B, i32 %i
+    %ptr_c = getelementptr i32, i32* %C, i32 %i
+    
+    %val_a = load i32, i32* %ptr_a
+    %val_b = load i32, i32* %ptr_b
+    %sum = add i32 %val_a, %val_b
+    store i32 %sum, i32* %ptr_c
+    
+    ret void
+}
+</code>
+        </div>
+
+        <h3>13.5.3 Generated tiny-gpu Assembly</h3>
+        <div class="code-block">
+<code><span class="comment">; Assume: baseA=0, baseB=16, baseC=32 (8 elements each)</span>
+<span class="comment">; R13=blockIdx, R14=blockDim, R15=threadIdx</span>
+
+<span class="comment">; Calculate global index: i = blockIdx * blockDim + threadIdx</span>
+MUL  R0, R13, R14      <span class="comment">; R0 = blockIdx * blockDim</span>
+ADD  R0, R0, R15       <span class="comment">; R0 = i = R0 + threadIdx</span>
+
+<span class="comment">; Load A[i]</span>
+CONST R1, #0           <span class="comment">; R1 = baseA = 0</span>
+ADD  R1, R1, R0        <span class="comment">; R1 = &amp;A[i]</span>
+LDR  R2, R1            <span class="comment">; R2 = A[i]</span>
+
+<span class="comment">; Load B[i]</span>
+CONST R3, #16          <span class="comment">; R3 = baseB = 16</span>
+ADD  R3, R3, R0        <span class="comment">; R3 = &amp;B[i]</span>
+LDR  R4, R3            <span class="comment">; R4 = B[i]</span>
+
+<span class="comment">; Compute C[i] = A[i] + B[i]</span>
+ADD  R5, R2, R4        <span class="comment">; R5 = A[i] + B[i]</span>
+
+<span class="comment">; Store to C[i]</span>
+CONST R6, #32          <span class="comment">; R6 = baseC = 32</span>
+ADD  R6, R6, R0        <span class="comment">; R6 = &amp;C[i]</span>
+STR  R5, R6            <span class="comment">; C[i] = R5</span>
+
+RET                    <span class="comment">; End kernel</span>
+</code>
+        </div>
+
+        <h3>13.5.4 Machine Code (Hex)</h3>
+        <div class="code-block">
+<code><span class="comment">// Final binary representation</span>
+<span class="comment">// Address  Hex      Assembly</span>
+0x00:     0x30DE   <span class="comment">// MUL  R0, R13, R14</span>
+0x02:     0x100F   <span class="comment">// ADD  R0, R0, R15</span>
+0x04:     0x7100   <span class="comment">// CONST R1, #0</span>
+0x06:     0x1110   <span class="comment">// ADD  R1, R1, R0</span>
+0x08:     0x5210   <span class="comment">// LDR  R2, R1</span>
+0x0A:     0x7310   <span class="comment">// CONST R3, #16</span>
+0x0C:     0x1330   <span class="comment">// ADD  R3, R3, R0</span>
+0x0E:     0x5430   <span class="comment">// LDR  R4, R3</span>
+0x10:     0x1524   <span class="comment">// ADD  R5, R2, R4</span>
+0x12:     0x7620   <span class="comment">// CONST R6, #32</span>
+0x14:     0x1660   <span class="comment">// ADD  R6, R6, R0</span>
+0x16:     0x6560   <span class="comment">// STR  R5, R6</span>
+0x18:     0xF000   <span class="comment">// RET</span>
+</code>
+        </div>
+
+        <h2>13.6 Advanced Topics</h2>
+
+        <h3>13.6.1 Divergent Branch Handling</h3>
+        <p>When threads in a warp/wavefront take different branch paths, the compiler must handle <strong>divergence</strong>:</p>
+
+        <div class="mermaid">
+graph TB
+    A["All Threads Active"] --> B{"Conditional<br/>Branch"}
+    B -->|"Some threads<br/>take 'then'"| C["Execute 'then' path<br/>Others masked"]
+    B -->|"Some threads<br/>take 'else'"| D["Execute 'else' path<br/>Others masked"]
+    C --> E["Reconvergence Point"]
+    D --> E
+    E --> F["All Threads Active"]
+    
+    style B fill:#fff3e0,stroke:#f57c00
+    style C fill:#e3f2fd,stroke:#1976d2
+    style D fill:#fce4ec,stroke:#c2185b
+    style E fill:#e8f5e9,stroke:#388e3c
+        </div>
+
+        <p>The compiler inserts <strong>reconvergence points</strong> where divergent threads synchronize before continuing execution.</p>
+
+        <h3>13.6.2 Occupancy Optimization</h3>
+        <p>The compiler balances register usage against thread occupancy:</p>
+
+        <div class="warning-box">
+            <strong>Register Pressure Trade-off:</strong>
+            <ul style="margin: 10px 0;">
+                <li>More registers per thread → Fewer concurrent threads → Lower occupancy</li>
+                <li>Fewer registers per thread → More spilling to memory → Higher latency</li>
+                <li>Optimal: Enough threads to hide memory latency without excessive spilling</li>
+            </ul>
+        </div>
+
+        <h3>13.6.3 Shared Memory Allocation</h3>
+        <p>The compiler determines shared memory requirements from kernel analysis:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Compiler analyzes __shared__ declarations</span>
+<span class="keyword">__shared__</span> <span class="type">float</span> tile[16][16];  <span class="comment">// 1KB per block</span>
+
+<span class="comment">// Generates allocation metadata in kernel binary header:</span>
+<span class="comment">// .shared_mem_size = 1024</span>
+<span class="comment">// .max_threads_per_block = min(hardware_limit, 65536 / shared_mem_size)</span>
+</code>
+        </div>
+
+        <h2>13.7 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 13.1: Hand-Compile a Kernel</h4>
+            <p>Write tiny-gpu assembly for the following kernel:</p>
+            <pre><code>C[i] = A[i] * B[i] + 1</code></pre>
+            <p>Assume: baseA = 0, baseB = 64, baseC = 128 (64 elements each, single block of 64 threads)</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>; R13=blockIdx (0), R14=blockDim (64), R15=threadIdx (0-63)
+
+; Calculate index (for single block, i = threadIdx)
+; Since blockIdx=0, we can directly use threadIdx
+; But for generality:
+MUL  R0, R13, R14      ; R0 = blockIdx * blockDim = 0
+ADD  R0, R0, R15       ; R0 = i = threadIdx
+
+; Load A[i]
+CONST R1, #0           ; R1 = baseA
+ADD  R1, R1, R0        ; R1 = &amp;A[i]
+LDR  R2, R1            ; R2 = A[i]
+
+; Load B[i]
+CONST R3, #64          ; R3 = baseB
+ADD  R3, R3, R0        ; R3 = &amp;B[i]
+LDR  R4, R3            ; R4 = B[i]
+
+; Compute A[i] * B[i]
+MUL  R5, R2, R4        ; R5 = A[i] * B[i]
+
+; Add 1
+CONST R6, #1           ; R6 = 1
+ADD  R5, R5, R6        ; R5 = A[i] * B[i] + 1
+
+; Store to C[i]
+CONST R7, #128         ; R7 = baseC (note: 128 > 127, needs 8-bit imm)
+ADD  R7, R7, R0        ; R7 = &amp;C[i]
+STR  R5, R7            ; C[i] = R5
+
+RET
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 13.2: Instruction Encoding</h4>
+            <p>Encode the following instructions as 16-bit hexadecimal:</p>
+            <ol>
+                <li>SUB R7, R3, R11</li>
+                <li>MUL R0, R13, R14 (using special registers)</li>
+                <li>CONST R10, #255</li>
+            </ol>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>1. SUB R7, R3, R11
+   Opcode: SUB = 0010
+   Dest:   R7  = 0111
+   Src1:   R3  = 0011
+   Src2:   R11 = 1011
+   Binary: 0010_0111_0011_1011
+   Hex: 0x273B
+
+2. MUL R0, R13, R14
+   Opcode: MUL = 0011
+   Dest:   R0  = 0000
+   Src1:   R13 = 1101
+   Src2:   R14 = 1110
+   Binary: 0011_0000_1101_1110
+   Hex: 0x30DE
+
+3. CONST R10, #255
+   Opcode: CONST = 0111
+   Dest:   R10   = 1010
+   Imm8:   255   = 1111_1111
+   Binary: 0111_1010_1111_1111
+   Hex: 0x7AFF
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 13.3: Optimization Analysis</h4>
+            <p>Consider the following unoptimized kernel code:</p>
+            <pre><code>for (int i = 0; i &lt; 4; i++) {
+    sum = sum + data[base + i] * 2;
+}</code></pre>
+            <p>Apply the following optimizations and show the result:</p>
+            <ol>
+                <li>Loop unrolling (factor = 4)</li>
+                <li>Strength reduction (multiply by 2 → left shift)</li>
+            </ol>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>// After loop unrolling:
+sum = sum + data[base + 0] * 2;
+sum = sum + data[base + 1] * 2;
+sum = sum + data[base + 2] * 2;
+sum = sum + data[base + 3] * 2;
+
+// After strength reduction (* 2 → &lt;&lt; 1):
+sum = sum + (data[base + 0] &lt;&lt; 1);
+sum = sum + (data[base + 1] &lt;&lt; 1);
+sum = sum + (data[base + 2] &lt;&lt; 1);
+sum = sum + (data[base + 3] &lt;&lt; 1);
+
+// Note: tiny-gpu doesn't have a shift instruction,
+// so we'd use: MUL Rx, Ry, R_two (where R_two holds 2)
+// Or ideally: ADD Rx, Ry, Ry (self-add = multiply by 2)
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <h2>13.8 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🔧 GPU compilers are multi-stage pipelines:</strong> From source code through IR generation, optimization passes, and finally code generation to machine instructions. Each stage progressively lowers the abstraction level.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ Optimization is critical for GPU performance:</strong> Loop unrolling, vectorization, and memory access coalescing can provide 10-100× speedups. The compiler automatically applies dozens of optimization passes.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📊 Register allocation determines occupancy:</strong> Spilling registers to memory is extremely expensive on GPUs (100-1000× slower than register access). The compiler must balance register usage against thread count.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🎯 ISA encoding is deterministic:</strong> Each instruction maps to a fixed bit pattern. Understanding encoding helps with debugging, performance analysis, and writing assembly optimizations.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔀 Divergence handling adds complexity:</strong> GPU compilers must manage control flow where threads in a warp/wavefront may take different paths, requiring masking and reconvergence logic.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-12.html">← Previous: Software Stack</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-14.html">Next →</a>
+            <a href="chapter-14.html">Next: Testing and Verification →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

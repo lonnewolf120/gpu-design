@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found | Create Your Own GPU</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .error-container {
+            max-width: 600px;
+            margin: 100px auto;
+            padding: 40px;
+            text-align: center;
+        }
+        .error-code {
+            font-size: 120px;
+            font-weight: bold;
+            color: #6366f1;
+            line-height: 1;
+            margin-bottom: 20px;
+        }
+        .error-message {
+            font-size: 24px;
+            color: #1e293b;
+            margin-bottom: 20px;
+        }
+        .error-description {
+            color: #64748b;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+        .gpu-art {
+            font-family: monospace;
+            font-size: 12px;
+            color: #94a3b8;
+            margin: 30px 0;
+            white-space: pre;
+            line-height: 1.2;
+        }
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #6366f1;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .nav-links a:hover {
+            background: #4f46e5;
+        }
+        .nav-links a.secondary {
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+        .nav-links a.secondary:hover {
+            background: #e2e8f0;
+        }
+        .search-section {
+            margin-top: 40px;
+            padding-top: 40px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .search-section h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+        }
+        .popular-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+        .popular-links a {
+            padding: 8px 16px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            color: #475569;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .popular-links a:hover {
+            background: #f1f5f9;
+            border-color: #6366f1;
+            color: #6366f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">Page Not Found</div>
+        <div class="error-description">
+            Oops! It looks like this page got lost in the pipeline. 
+            The instruction you're looking for isn't in our memory.
+        </div>
+        
+        <div class="gpu-art">
+    ┌─────────────────────────────────┐
+    │       TINY-GPU ERROR LOG        │
+    ├─────────────────────────────────┤
+    │  PC: 0x404   STATUS: NOT_FOUND  │
+    │  FETCH: FAILED                  │
+    │  DECODE: N/A                    │
+    │  EXECUTE: HALTED                │
+    └─────────────────────────────────┘
+        </div>
+        
+        <div class="nav-links">
+            <a href="index.html">Go Home</a>
+            <a href="table-of-contents.html" class="secondary">Table of Contents</a>
+        </div>
+        
+        <div class="search-section">
+            <h3>Popular Destinations</h3>
+            <div class="popular-links">
+                <a href="chapters/chapter-01.html">Chapter 1: Big Picture</a>
+                <a href="chapters/chapter-05.html">Chapter 5: ISA</a>
+                <a href="chapters/chapter-15.html">Chapter 15: tiny-gpu Overview</a>
+                <a href="appendices/appendix-a-glossary.html">Glossary</a>
+                <a href="demos/assembly-simulator.html">Assembly Simulator</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

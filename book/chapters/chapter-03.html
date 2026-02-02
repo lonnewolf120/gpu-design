@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 3: Parallel Execution Models | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <style>
         .chapter-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
         .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
@@ -13,10 +14,15 @@
         .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
         .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
         .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
+        .mermaid { background: transparent; text-align: center; }
         .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
         .comparison-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         .comparison-table th, .comparison-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        .comparison-table th { background: #f5f5f5; font-weight: bold; }
+        .comparison-table th { background: #f1f5f9; }
+        .comparison-table tr:nth-child(even) { background: #f9fafb; }
+        .concept-card { padding: 20px; margin: 15px 0; border-radius: 12px; border-left: 4px solid; }
+        .concept-card.simd { background: #eef2ff; border-color: #6366f1; }
+        .concept-card.simt { background: #ecfdf5; border-color: #10b981; }
     </style>
 </head>
 <body>
@@ -31,149 +37,129 @@
         
         <div class="meta" style="color: var(--muted); margin: 20px 0;">
             <span>Part I: GPU Fundamentals</span> • 
-            <span>Reading time: ~65 min</span>
+            <span>Reading time: ~60 min</span>
         </div>
 
         <h2>Introduction</h2>
         <p>
-            In Chapter 2, we learned that GPUs allocate more transistors to computation than control logic, 
-            making them throughput machines rather than latency machines. But <em>how</em> do GPUs actually 
-            execute thousands of threads in parallel? What are the software and hardware abstractions that 
-            make this possible?
+            We've established that GPUs are parallel processors, but <em>how</em> do they achieve parallelism? 
+            This chapter dives deep into the execution models that make GPUs tick: SIMD, SIMT, warps, thread 
+            blocks, and the programming abstractions built on top of them.
         </p>
 
         <p>
-            This chapter dives deep into <strong>parallel execution models</strong> — the conceptual frameworks 
-            that define how GPUs organize, schedule, and execute massive amounts of parallel work. We'll cover:
+            Understanding these concepts is critical whether you're programming GPUs or designing them. 
+            The execution model determines everything from hardware design choices to optimal coding patterns.
         </p>
-        <ul>
-            <li>SIMD (Single Instruction, Multiple Data)</li>
-            <li>SIMT (Single Instruction, Multiple Thread) — the GPU way</li>
-            <li>The thread hierarchy: threads, warps, blocks, and grids</li>
-            <li>Thread divergence and how GPUs handle it</li>
-            <li>Programming model abstractions (CUDA, OpenCL, HIP)</li>
-            <li>Kernel launch mechanics</li>
-            <li>Synchronization primitives</li>
-            <li>Practical code examples</li>
-        </ul>
 
-        <div class="key-takeaway">
-            <strong>Why This Matters:</strong> Understanding execution models is critical for both GPU users 
-            (writing efficient kernels) and GPU designers (building hardware that efficiently supports these models). 
-            Without this knowledge, you can't write fast code or design good hardware.
+        <h2>3.1 SIMD: The Foundation</h2>
+
+        <p>
+            <strong>SIMD (Single Instruction, Multiple Data)</strong> is the oldest and simplest form of 
+            data parallelism. One instruction operates on multiple data elements simultaneously.
+        </p>
+
+        <div class="concept-card simd">
+            <h4>🔢 SIMD Concept</h4>
+            <p>Instead of:</p>
+            <code>for (i=0; i&lt;4; i++) C[i] = A[i] + B[i];</code>
+            <p style="margin-top: 10px;">Execute a single vector instruction:</p>
+            <code>VADD C[0:3], A[0:3], B[0:3]</code>
         </div>
-
-        <h2>3.1 SIMD: The Foundation of Parallel Execution</h2>
-
-        <h3>What is SIMD?</h3>
-        <p>
-            <strong>SIMD (Single Instruction, Multiple Data)</strong> is a parallel computing paradigm where 
-            a single instruction operates on multiple data elements simultaneously. Think of it like this:
-        </p>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 13px;">
-Regular (Scalar) Execution:
-    ADD R1, R2, R3      // R1 = R2 + R3  (one addition)
-
-SIMD Execution:
-    VADD V1, V2, V3     // V1[0..7] = V2[0..7] + V3[0..7]  (8 additions in parallel!)
-            </pre>
-            <div class="figure-caption">Figure 3.1: Scalar vs SIMD execution</div>
+            <div class="mermaid">
+flowchart LR
+    subgraph SCALAR["Scalar Execution (4 cycles)"]
+        direction TB
+        S1["ADD C[0], A[0], B[0]"] --> S2["ADD C[1], A[1], B[1]"]
+        S2 --> S3["ADD C[2], A[2], B[2]"]
+        S3 --> S4["ADD C[3], A[3], B[3]"]
+    end
+    
+    subgraph SIMD["SIMD Execution (1 cycle)"]
+        direction TB
+        V1["VADD"]
+        A0["A[0]"] --> V1
+        A1["A[1]"] --> V1
+        A2["A[2]"] --> V1
+        A3["A[3]"] --> V1
+        B0["B[0]"] --> V1
+        B1["B[1]"] --> V1
+        B2["B[2]"] --> V1
+        B3["B[3]"] --> V1
+        V1 --> C0["C[0]"]
+        V1 --> C1["C[1]"]
+        V1 --> C2["C[2]"]
+        V1 --> C3["C[3]"]
+    end
+    
+    style SCALAR fill:#fee2e2,stroke:#ef4444
+    style SIMD fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.1: Scalar vs SIMD execution — 4 operations in 1 cycle vs 4 cycles</div>
         </div>
 
         <p>
-            In SIMD, a single instruction controls multiple <strong>processing elements (PEs)</strong> that 
-            each work on different data. All PEs execute the same instruction in lockstep.
+            SIMD exists in CPUs too (SSE, AVX, NEON), but GPUs take it much further with wider vectors 
+            and more aggressive parallelism.
         </p>
 
-        <h3>SIMD in CPUs</h3>
+        <h2>3.2 SIMT: NVIDIA's Innovation</h2>
+
         <p>
-            Modern CPUs have SIMD units for performance. Intel CPUs use SSE (128-bit) and AVX (256/512-bit) 
-            instructions. ARM CPUs use NEON. These let you process 4, 8, or even 16 numbers at once:
+            <strong>SIMT (Single Instruction, Multiple Threads)</strong> is NVIDIA's programming model 
+            innovation that makes GPU programming feel like writing threaded code while executing as SIMD.
         </p>
 
-        <div class="code-block">
-<pre>// C code: add two arrays (scalar)
-for (int i = 0; i < 1024; i++) {
-    c[i] = a[i] + b[i];  // One addition per iteration
-}
-
-// C code with AVX intrinsics (SIMD)
-for (int i = 0; i < 1024; i += 8) {
-    __m256 va = _mm256_load_ps(&a[i]);   // Load 8 floats
-    __m256 vb = _mm256_load_ps(&b[i]);   // Load 8 floats
-    __m256 vc = _mm256_add_ps(va, vb);   // Add 8 pairs in parallel
-    _mm256_store_ps(&c[i], vc);          // Store 8 results
-}
-// 8× fewer iterations, ~8× faster (if memory bandwidth allows)
-</pre>
+        <div class="concept-card simt">
+            <h4>⚡ SIMT Concept</h4>
+            <p><strong>Software view:</strong> Write code for a single thread, launch thousands of independent threads.</p>
+            <p><strong>Hardware view:</strong> Groups of threads (warps) execute the same instruction in lockstep SIMD.</p>
         </div>
-
-        <h3>Limitations of Pure SIMD</h3>
-        <p>
-            Traditional SIMD has some drawbacks:
-        </p>
-        <ul>
-            <li><strong>Fixed width:</strong> You're stuck with 8, 16, or 32-wide vectors. Awkward for problems that don't fit neatly.</li>
-            <li><strong>Explicit vectorization:</strong> Programmers must use intrinsics or rely on compiler auto-vectorization.</li>
-            <li><strong>No independent control flow:</strong> All lanes must execute the same instruction. Branching is expensive.</li>
-            <li><strong>Register pressure:</strong> Wide vectors consume lots of register space.</li>
-        </ul>
-
-        <div class="engineer-note">
-            <strong>Engineer's Note:</strong> GPUs take SIMD to the extreme but add a twist: they make it look 
-            like independent threads to the programmer. This is called SIMT, and it's one of the key innovations 
-            that makes GPUs so programmable.
-        </div>
-
-        <h2>3.2 SIMT: Single Instruction, Multiple Thread</h2>
-
-        <h3>The NVIDIA Innovation</h3>
-        <p>
-            When NVIDIA introduced the Tesla architecture (2006) and CUDA, they popularized <strong>SIMT 
-            (Single Instruction, Multiple Thread)</strong>. SIMT is like SIMD, but instead of explicit vectors, 
-            you write code as if each thread is independent. The hardware groups threads together and executes 
-            them in lockstep.
-        </p>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 12px;">
-SIMD Thinking:                  SIMT Thinking:
-┌─────────────────┐            ┌──────────┐ ┌──────────┐ ┌──────────┐
-│  VADD V1,V2,V3  │            │ Thread 0 │ │ Thread 1 │ │ Thread 2 │ ...
-│  (8 elements)   │            │  c = a+b │ │  c = a+b │ │  c = a+b │
-└─────────────────┘            └──────────┘ └──────────┘ └──────────┘
-      ↓                              ↓            ↓            ↓
-   Hardware                        Hardware groups into "warp"
- 8 ALUs execute                   and executes as SIMD under the hood
-   in parallel                           (but looks like threads!)
-            </pre>
-            <div class="figure-caption">Figure 3.2: SIMD vs SIMT programming model</div>
+            <div class="mermaid">
+flowchart TB
+    subgraph SW["Software View: Independent Threads"]
+        direction LR
+        T0["Thread 0<br/>C[0] = A[0] + B[0]"]
+        T1["Thread 1<br/>C[1] = A[1] + B[1]"]
+        T2["Thread 2<br/>C[2] = A[2] + B[2]"]
+        TN["Thread N<br/>C[N] = A[N] + B[N]"]
+    end
+    
+    subgraph HW["Hardware View: Warp Execution"]
+        direction TB
+        WARP["Warp (32 threads)"]
+        INST["Single ADD instruction"]
+        ALU0["ALU 0"] 
+        ALU1["ALU 1"]
+        ALU2["ALU ..."]
+        ALU31["ALU 31"]
+        
+        WARP --> INST
+        INST --> ALU0
+        INST --> ALU1
+        INST --> ALU2
+        INST --> ALU31
+    end
+    
+    SW --> HW
+    
+    style SW fill:#dbeafe,stroke:#3b82f6
+    style HW fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.2: SIMT — threads in software, SIMD in hardware</div>
         </div>
 
         <h3>Why SIMT is Powerful</h3>
-        <p>
-            SIMT gives you the <strong>illusion of independent threads</strong> while maintaining the 
-            <strong>efficiency of SIMD execution</strong>. Benefits:
-        </p>
         <ul>
-            <li><strong>Easier programming:</strong> Write code for one thread, hardware parallelizes it.</li>
-            <li><strong>Flexible parallelism:</strong> Launch 1,000 threads or 1,000,000 threads — same code!</li>
-            <li><strong>Per-thread state:</strong> Each thread has its own registers and PC (program counter).</li>
-            <li><strong>Graceful divergence:</strong> Threads can take different paths (more on this later).</li>
+            <li><strong>Easier programming:</strong> Write code for one thread, hardware parallelizes it</li>
+            <li><strong>Flexible parallelism:</strong> Launch 1,000 or 1,000,000 threads — same code!</li>
+            <li><strong>Per-thread state:</strong> Each thread has its own registers and PC</li>
+            <li><strong>Graceful divergence:</strong> Threads can take different paths (more on this later)</li>
         </ul>
-
-        <h3>The SIMT Execution Model</h3>
-        <p>
-            Here's how it works under the hood:
-        </p>
-        <ol>
-            <li>You launch thousands of threads (e.g., 10,000 threads)</li>
-            <li>Hardware groups threads into <strong>warps</strong> (NVIDIA) or <strong>wavefronts</strong> (AMD) — typically 32 or 64 threads</li>
-            <li>Each warp executes one instruction at a time, but applies it to all 32/64 threads simultaneously</li>
-            <li>If threads diverge (e.g., some take an if-branch, others don't), the warp serializes execution</li>
-        </ol>
 
         <div class="key-takeaway">
             <strong>Key Insight:</strong> SIMT is SIMD in hardware, threads in software. The programmer thinks 
@@ -186,6 +172,40 @@ SIMD Thinking:                  SIMT Thinking:
             GPU programming models organize threads into a hierarchy. Let's use CUDA terminology (the most common), 
             but know that OpenCL and HIP use similar concepts with different names.
         </p>
+
+        <div class="figure">
+            <div class="mermaid">
+flowchart TB
+    subgraph GRID["Grid (Entire Kernel Launch)"]
+        subgraph BLOCK0["Block (0,0)"]
+            subgraph WARP0["Warp 0"]
+                T0["T0"] ~~~ T1["T1"] ~~~ T2["..."] ~~~ T31["T31"]
+            end
+            subgraph WARP1["Warp 1"]
+                T32["T32"] ~~~ T33["T33"] ~~~ T34["..."] ~~~ T63["T63"]
+            end
+        end
+        subgraph BLOCK1["Block (0,1)"]
+            W2["Warps..."]
+        end
+        subgraph BLOCK2["Block (1,0)"]
+            W3["Warps..."]
+        end
+        subgraph BLOCK3["Block (1,1)"]
+            W4["Warps..."]
+        end
+    end
+    
+    style GRID fill:#f1f5f9,stroke:#64748b
+    style BLOCK0 fill:#dbeafe,stroke:#3b82f6
+    style BLOCK1 fill:#dbeafe,stroke:#3b82f6
+    style BLOCK2 fill:#dbeafe,stroke:#3b82f6
+    style BLOCK3 fill:#dbeafe,stroke:#3b82f6
+    style WARP0 fill:#dcfce7,stroke:#22c55e
+    style WARP1 fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.3: GPU thread hierarchy — Grid → Blocks → Warps → Threads</div>
+        </div>
 
         <h3>Level 1: Thread</h3>
         <p>
@@ -205,29 +225,44 @@ __global__ void vectorAdd(float *a, float *b, float *c, int N) {
     if (i < N) {
         c[i] = a[i] + b[i];
     }
-}
-</pre>
+}</pre>
         </div>
 
         <h3>Level 2: Warp (NVIDIA) / Wavefront (AMD)</h3>
         <p>
-            A <strong>warp</strong> is a group of threads (typically 32 on NVIDIA, 64 on AMD) that execute 
-            the same instruction together. This is the hardware's SIMD width.
+            A <strong>warp</strong> is a group of 32 threads (64 on AMD) that execute the same instruction together. 
+            This is the hardware's SIMD width.
         </p>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 12px;">
-Thread Block (128 threads)
-┌────────────────────────────────────────────────┐
-│ Warp 0: Threads  0-31  │ Execute instruction A │
-│ Warp 1: Threads 32-63  │ Execute instruction B │
-│ Warp 2: Threads 64-95  │ Execute instruction C │
-│ Warp 3: Threads 96-127 │ Execute instruction A │
-└────────────────────────────────────────────────┘
-All threads in a warp execute the same instruction
-(or are masked off if diverged)
-            </pre>
-            <div class="figure-caption">Figure 3.3: Warps within a thread block</div>
+            <div class="mermaid">
+flowchart LR
+    subgraph BLOCK["Thread Block (128 threads)"]
+        subgraph W0["Warp 0: Threads 0-31"]
+            direction TB
+            I0["Instruction A"]
+        end
+        subgraph W1["Warp 1: Threads 32-63"]
+            direction TB
+            I1["Instruction B"]
+        end
+        subgraph W2["Warp 2: Threads 64-95"]
+            direction TB
+            I2["Instruction C"]
+        end
+        subgraph W3["Warp 3: Threads 96-127"]
+            direction TB
+            I3["Instruction A"]
+        end
+    end
+    
+    style BLOCK fill:#f1f5f9,stroke:#64748b
+    style W0 fill:#dcfce7,stroke:#22c55e
+    style W1 fill:#fef3c7,stroke:#f59e0b
+    style W2 fill:#dbeafe,stroke:#3b82f6
+    style W3 fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.4: Warps execute independently; threads within a warp execute in lockstep</div>
         </div>
 
         <div class="engineer-note">
@@ -236,92 +271,49 @@ All threads in a warp execute the same instruction
             hardware parameter you'll choose when designing your GPU.
         </div>
 
-        <h3>Level 3: Thread Block (CUDA) / Work-Group (OpenCL)</h3>
+        <h3>Level 3: Thread Block / Work-Group</h3>
         <p>
             A <strong>thread block</strong> is a group of threads (typically 128, 256, or 512) that:
         </p>
         <ul>
-            <li>Execute on the same GPU core (Streaming Multiprocessor in NVIDIA)</li>
-            <li>Share fast <strong>shared memory</strong> (like a software-managed cache)</li>
-            <li>Can synchronize with each other using <code>__syncthreads()</code></li>
-            <li>Are scheduled as a unit — once a block starts on a core, it stays there until done</li>
+            <li>Execute on the same GPU core (SM in NVIDIA terms)</li>
+            <li>Share fast <strong>shared memory</strong></li>
+            <li>Can synchronize with <code>__syncthreads()</code></li>
+            <li>Are scheduled as a unit</li>
         </ul>
-
-        <div class="code-block">
-<pre>// CUDA kernel with thread blocks
-__global__ void matrixMultiply(float *A, float *B, float *C, int N) {
-    // Each thread block handles a tile of the output matrix
-    __shared__ float tileA[16][16];  // Shared among threads in block
-    __shared__ float tileB[16][16];
-    
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    float sum = 0.0f;
-    
-    // Load tiles, multiply, accumulate...
-    // (Details in later chapters)
-    
-    C[row * N + col] = sum;
-}
-</pre>
-        </div>
 
         <h3>Level 4: Grid</h3>
         <p>
-            A <strong>grid</strong> is the entire set of thread blocks launched by a kernel. When you launch 
-            a kernel, you specify:
+            A <strong>grid</strong> is the entire set of thread blocks launched by a kernel.
         </p>
-        <ul>
-            <li>Grid dimensions (how many blocks in X, Y, Z)</li>
-            <li>Block dimensions (how many threads per block in X, Y, Z)</li>
-        </ul>
-
-        <div class="code-block">
-<pre>// Launching a kernel
-int N = 1024;
-int threadsPerBlock = 256;
-int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;  // Ceiling division
-
-// 1D grid of 1D blocks
-vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_a, d_b, d_c, N);
-
-// 2D grid of 2D blocks (common for matrix operations)
-dim3 blockDim(16, 16);  // 16×16 = 256 threads per block
-dim3 gridDim(64, 64);   // 64×64 = 4096 blocks
-matrixMultiply<<<gridDim, blockDim>>>(d_A, d_B, d_C, N);
-</pre>
-        </div>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 11px;">
-Grid (2D example: 4×3 blocks)
-┌──────────────────────────────────────────────────────────┐
-│ Block(0,0)  Block(1,0)  Block(2,0)  Block(3,0)           │
-│ ┌────┐      ┌────┐      ┌────┐      ┌────┐              │
-│ │Thds│      │Thds│      │Thds│      │Thds│              │
-│ └────┘      └────┘      └────┘      └────┘              │
-│                                                           │
-│ Block(0,1)  Block(1,1)  Block(2,1)  Block(3,1)           │
-│ ┌────┐      ┌────┐      ┌────┐      ┌────┐              │
-│ │Thds│      │Thds│      │Thds│      │Thds│              │
-│ └────┘      └────┘      └────┘      └────┘              │
-│                                                           │
-│ Block(0,2)  Block(1,2)  Block(2,2)  Block(3,2)           │
-│ ┌────┐      ┌────┐      ┌────┐      ┌────┐              │
-│ │Thds│      │Thds│      │Thds│      │Thds│              │
-│ └────┘      └────┘      └────┘      └────┘              │
-└──────────────────────────────────────────────────────────┘
-Total threads = blocks × threads/block = 12 blocks × 256 threads = 3072 threads
-            </pre>
-            <div class="figure-caption">Figure 3.4: Grid of thread blocks</div>
+            <div class="mermaid">
+flowchart TB
+    subgraph GRID["Grid (4×3 = 12 Blocks)"]
+        direction TB
+        subgraph ROW0[" "]
+            direction LR
+            B00["Block<br/>(0,0)"] ~~~ B10["Block<br/>(1,0)"] ~~~ B20["Block<br/>(2,0)"] ~~~ B30["Block<br/>(3,0)"]
+        end
+        subgraph ROW1[" "]
+            direction LR
+            B01["Block<br/>(0,1)"] ~~~ B11["Block<br/>(1,1)"] ~~~ B21["Block<br/>(2,1)"] ~~~ B31["Block<br/>(3,1)"]
+        end
+        subgraph ROW2[" "]
+            direction LR
+            B02["Block<br/>(0,2)"] ~~~ B12["Block<br/>(1,2)"] ~~~ B22["Block<br/>(2,2)"] ~~~ B32["Block<br/>(3,2)"]
+        end
+    end
+    
+    NOTE["Total: 12 blocks × 256 threads = 3072 threads"]
+    
+    style GRID fill:#f1f5f9,stroke:#64748b
+            </div>
+            <div class="figure-caption">Figure 3.5: 2D Grid of thread blocks</div>
         </div>
 
         <h3>Thread Indexing</h3>
-        <p>
-            Each thread can determine its global ID using built-in variables:
-        </p>
-
         <div class="code-block">
 <pre>// 1D grid of 1D blocks
 int globalThreadId = blockIdx.x * blockDim.x + threadIdx.x;
@@ -329,13 +321,11 @@ int globalThreadId = blockIdx.x * blockDim.x + threadIdx.x;
 // 2D grid of 2D blocks (e.g., matrix operations)
 int row = blockIdx.y * blockDim.y + threadIdx.y;
 int col = blockIdx.x * blockDim.x + threadIdx.x;
-int globalId = row * totalColumns + col;
 
 // 3D example (e.g., volumetric data)
 int x = blockIdx.x * blockDim.x + threadIdx.x;
 int y = blockIdx.y * blockDim.y + threadIdx.y;
-int z = blockIdx.z * blockDim.z + threadIdx.z;
-</pre>
+int z = blockIdx.z * blockDim.z + threadIdx.z;</pre>
         </div>
 
         <table class="comparison-table">
@@ -359,7 +349,7 @@ int z = blockIdx.z * blockDim.z + threadIdx.z;
                 <tr>
                     <td>2</td>
                     <td>Warp</td>
-                    <td>Wavefront/Sub-Group</td>
+                    <td>Wavefront</td>
                     <td>32 (NVIDIA), 64 (AMD)</td>
                     <td>SIMD execution width</td>
                 </tr>
@@ -374,7 +364,7 @@ int z = blockIdx.z * blockDim.z + threadIdx.z;
                     <td>4</td>
                     <td>Grid</td>
                     <td>NDRange</td>
-                    <td>1000s-1000000s of threads</td>
+                    <td>1000s-1000000s</td>
                     <td>Entire GPU</td>
                 </tr>
             </tbody>
@@ -385,7 +375,7 @@ int z = blockIdx.z * blockDim.z + threadIdx.z;
         <h3>The Divergence Problem</h3>
         <p>
             Since threads in a warp execute in lockstep (SIMT), what happens when they need to take different 
-            paths through the code? This is called <strong>thread divergence</strong>.
+            paths? This is called <strong>thread divergence</strong>.
         </p>
 
         <div class="code-block">
@@ -393,86 +383,73 @@ int z = blockIdx.z * blockDim.z + threadIdx.z;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (i % 2 == 0) {
-        // Even threads: execute path A (expensive computation)
+        // Even threads: execute path A
         data[i] = computeA(data[i]);
     } else {
-        // Odd threads: execute path B (simple operation)
+        // Odd threads: execute path B
         data[i] = data[i] * 2;
     }
-}
-</pre>
+}</pre>
         </div>
 
-        <p>
-            In this kernel, half the threads in each warp take the if-branch, half take the else-branch. 
-            What happens in hardware?
-        </p>
-
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 12px;">
-Warp with 8 threads (simplified from 32):
-Threads: 0  1  2  3  4  5  6  7
-Condition: T  F  T  F  T  F  T  F  (T = even, F = odd)
-
-Execution:
-Step 1: Execute if-branch for threads 0,2,4,6 (threads 1,3,5,7 are MASKED)
-        ████ ░░░░ ████ ░░░░ ████ ░░░░ ████ ░░░░
-        Active        Inactive
-
-Step 2: Execute else-branch for threads 1,3,5,7 (threads 0,2,4,6 are MASKED)
-        ░░░░ ████ ░░░░ ████ ░░░░ ████ ░░░░ ████
-        Inactive      Active
-
-Result: Both paths execute, but at different times. 
-        Total time = time(if) + time(else)  ← SERIALIZATION!
-            </pre>
-            <div class="figure-caption">Figure 3.5: Thread divergence causes serialization</div>
+            <div class="mermaid">
+sequenceDiagram
+    participant W as Warp (8 threads)
+    participant IF as If-Branch
+    participant ELSE as Else-Branch
+    
+    Note over W: Threads 0,2,4,6 = Even<br/>Threads 1,3,5,7 = Odd
+    
+    W->>IF: Step 1: Execute IF (Even threads active)
+    Note right of IF: Threads 0,2,4,6 ACTIVE<br/>Threads 1,3,5,7 MASKED
+    
+    W->>ELSE: Step 2: Execute ELSE (Odd threads active)
+    Note right of ELSE: Threads 0,2,4,6 MASKED<br/>Threads 1,3,5,7 ACTIVE
+    
+    Note over W: Step 3: Reconverge<br/>All threads active again
+            </div>
+            <div class="figure-caption">Figure 3.6: Thread divergence causes serialization — both paths execute sequentially</div>
         </div>
 
         <h3>Hardware Mechanism: Active Masks</h3>
-        <p>
-            GPUs handle divergence using <strong>active masks</strong>:
-        </p>
         <ul>
             <li>Each warp has a bitmask indicating which threads are active</li>
             <li>When branches diverge, the warp executes each path sequentially</li>
-            <li>Inactive threads are masked off (their results are discarded)</li>
+            <li>Inactive threads are masked off (results discarded)</li>
             <li>When paths reconverge, all threads are active again</li>
         </ul>
 
-        <div class="engineer-note">
-            <strong>Design Decision:</strong> When building a GPU, you need to implement a <strong>reconvergence stack</strong> 
-            in hardware. This keeps track of divergence points and ensures threads reconverge at the right place. 
-            We'll implement this in Chapter 17 when we build the GPU core.
+        <div class="figure">
+            <div class="mermaid">
+flowchart TB
+    START["All threads active<br/>Mask: 11111111"]
+    
+    BRANCH{"if (tid % 2 == 0)?"}
+    
+    IF_PATH["Execute IF branch<br/>Mask: 10101010<br/>(Even threads)"]
+    ELSE_PATH["Execute ELSE branch<br/>Mask: 01010101<br/>(Odd threads)"]
+    
+    RECONVERGE["Reconverge<br/>Mask: 11111111"]
+    
+    START --> BRANCH
+    BRANCH -->|Even| IF_PATH
+    BRANCH -->|Odd| ELSE_PATH
+    IF_PATH --> RECONVERGE
+    ELSE_PATH --> RECONVERGE
+    
+    style IF_PATH fill:#dcfce7,stroke:#22c55e
+    style ELSE_PATH fill:#fef3c7,stroke:#f59e0b
+            </div>
+            <div class="figure-caption">Figure 3.7: Active mask mechanism during divergence</div>
         </div>
 
-        <h3>Performance Impact</h3>
-        <p>
-            Divergence kills performance because you lose parallelism:
-        </p>
-
-        <div class="code-block">
-<pre>// BAD: Heavy divergence
-if (threadIdx.x < 16) {
-    expensiveOperation();  // Only half the warp is active
-}
-
-// GOOD: All threads do the same thing
-int value = expensiveOperation();  // All threads active
-if (threadIdx.x < 16) {
-    output[threadIdx.x] = value;  // Cheap divergence (just a store)
-}
-</pre>
+        <div class="engineer-note">
+            <strong>Design Decision:</strong> When building a GPU, you need to implement a <strong>reconvergence stack</strong> 
+            in hardware. This keeps track of divergence points and ensures threads reconverge at the right place.
         </div>
 
         <h3>Divergence-Free Patterns</h3>
-        <p>
-            Best practices to minimize divergence:
-        </p>
-
-        <ol>
-            <li><strong>Warp-aligned branching:</strong> Make sure all threads in a warp take the same branch</li>
-        </ol>
 
         <div class="code-block">
 <pre>// BAD: Adjacent threads diverge
@@ -480,49 +457,16 @@ if (threadIdx.x % 2 == 0) { ... }
 
 // GOOD: Entire warps stay together (warp size = 32)
 if (threadIdx.x < 32) { ... }  // Warp 0: all true, Warp 1: all false
-</pre>
-        </div>
-
-        <ol start="2">
-            <li><strong>Predication instead of branching:</strong> Use conditional moves</li>
-        </ol>
-
-        <div class="code-block">
-<pre>// BAD: Branch divergence
-if (condition) {
-    result = a;
-} else {
-    result = b;
-}
 
 // BETTER: Predicated execution (no branch)
-result = condition ? a : b;  // Often compiles to a select instruction
-</pre>
+result = condition ? a : b;  // Compiles to select instruction</pre>
         </div>
-
-        <ol start="3">
-            <li><strong>Data reorganization:</strong> Sort data so similar items are processed by the same warp</li>
-        </ol>
 
         <h2>3.5 Programming Model Abstractions</h2>
 
         <h3>CUDA (NVIDIA)</h3>
-        <p>
-            CUDA is the most popular GPU programming model. Key features:
-        </p>
-        <ul>
-            <li>C/C++ with extensions (<code>__global__</code>, <code>__device__</code>, <code>__shared__</code>)</li>
-            <li>Kernel launch syntax: <code>kernel<<<grid, block>>>(args)</code></li>
-            <li>Built-in variables: <code>threadIdx</code>, <code>blockIdx</code>, <code>blockDim</code>, <code>gridDim</code></li>
-            <li>Memory hierarchy: global, shared, local, constant, texture</li>
-            <li>Synchronization: <code>__syncthreads()</code>, atomics, cooperative groups</li>
-        </ul>
-
         <div class="code-block">
 <pre>// Complete CUDA example: vector addition
-#include <cuda_runtime.h>
-#include <stdio.h>
-
 __global__ void vectorAdd(float *a, float *b, float *c, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
@@ -532,92 +476,31 @@ __global__ void vectorAdd(float *a, float *b, float *c, int N) {
 
 int main() {
     int N = 1<<20;  // 1 million elements
-    size_t bytes = N * sizeof(float);
     
-    // Allocate host memory
-    float *h_a = (float*)malloc(bytes);
-    float *h_b = (float*)malloc(bytes);
-    float *h_c = (float*)malloc(bytes);
-    
-    // Initialize data
-    for (int i = 0; i < N; i++) {
-        h_a[i] = i;
-        h_b[i] = i * 2;
-    }
-    
-    // Allocate device memory
-    float *d_a, *d_b, *d_c;
-    cudaMalloc(&d_a, bytes);
-    cudaMalloc(&d_b, bytes);
-    cudaMalloc(&d_c, bytes);
-    
-    // Copy data to device
-    cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice);
+    // Allocate and copy data...
     
     // Launch kernel
     int threads = 256;
     int blocks = (N + threads - 1) / threads;
     vectorAdd<<<blocks, threads>>>(d_a, d_b, d_c, N);
     
-    // Copy result back
-    cudaMemcpy(h_c, d_c, bytes, cudaMemcpyDeviceToHost);
-    
-    // Verify
-    for (int i = 0; i < 10; i++) {
-        printf("c[%d] = %.2f\n", i, h_c[i]);
-    }
-    
-    // Cleanup
-    cudaFree(d_a); cudaFree(d_b); cudaFree(d_c);
-    free(h_a); free(h_b); free(h_c);
     return 0;
-}
-</pre>
+}</pre>
         </div>
 
         <h3>OpenCL (Cross-Platform)</h3>
-        <p>
-            OpenCL is a vendor-neutral standard that works on NVIDIA, AMD, Intel, and even CPUs/FPGAs:
-        </p>
-
         <div class="code-block">
-<pre>// OpenCL kernel (same logic as CUDA)
+<pre>// OpenCL kernel (same logic)
 __kernel void vectorAdd(__global float *a, __global float *b, 
                         __global float *c, int N) {
-    int i = get_global_id(0);  // Similar to blockIdx.x * blockDim.x + threadIdx.x
+    int i = get_global_id(0);
     if (i < N) {
         c[i] = a[i] + b[i];
     }
-}
-</pre>
-        </div>
-
-        <p>
-            OpenCL is more verbose on the host side (requires explicit platform/device/context setup), 
-            but offers portability.
-        </p>
-
-        <h3>HIP (AMD's CUDA-Compatible API)</h3>
-        <p>
-            AMD's HIP allows you to write code that's nearly identical to CUDA but runs on AMD GPUs:
-        </p>
-
-        <div class="code-block">
-<pre>// HIP kernel (almost identical to CUDA!)
-__global__ void vectorAdd(float *a, float *b, float *c, int N) {
-    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-    if (i < N) {
-        c[i] = a[i] + b[i];
-    }
-}
-
-// Launch: hipLaunchKernelGGL(vectorAdd, blocks, threads, 0, 0, d_a, d_b, d_c, N);
-</pre>
+}</pre>
         </div>
 
         <h3>Comparison Table</h3>
-
         <table class="comparison-table">
             <thead>
                 <tr>
@@ -631,20 +514,14 @@ __global__ void vectorAdd(float *a, float *b, float *c, int N) {
                 <tr>
                     <td>Vendor</td>
                     <td>NVIDIA</td>
-                    <td>Khronos (open standard)</td>
+                    <td>Khronos (open)</td>
                     <td>AMD</td>
                 </tr>
                 <tr>
                     <td>Target GPUs</td>
                     <td>NVIDIA only</td>
                     <td>All vendors</td>
-                    <td>AMD (+ NVIDIA via hipify)</td>
-                </tr>
-                <tr>
-                    <td>Language</td>
-                    <td>C++ with extensions</td>
-                    <td>C99-based kernel language</td>
-                    <td>C++ with extensions (CUDA-like)</td>
+                    <td>AMD + NVIDIA</td>
                 </tr>
                 <tr>
                     <td>Ease of Use</td>
@@ -653,92 +530,67 @@ __global__ void vectorAdd(float *a, float *b, float *c, int N) {
                     <td>⭐⭐⭐⭐</td>
                 </tr>
                 <tr>
-                    <td>Performance</td>
-                    <td>Excellent on NVIDIA</td>
-                    <td>Good (vendor-dependent)</td>
-                    <td>Excellent on AMD</td>
-                </tr>
-                <tr>
                     <td>Ecosystem</td>
-                    <td>Huge (cuBLAS, cuDNN, etc.)</td>
+                    <td>Huge</td>
                     <td>Moderate</td>
-                    <td>Growing (rocBLAS, MIOpen)</td>
+                    <td>Growing</td>
                 </tr>
             </tbody>
         </table>
 
         <h2>3.6 Kernel Launch Mechanics</h2>
 
-        <h3>What Happens When You Launch a Kernel?</h3>
         <p>
-            Let's trace the journey from <code>kernel<<<grid, block>>>(args)</code> to actual hardware execution:
+            Let's trace the journey from <code>kernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args)</code> to hardware execution:
         </p>
 
-        <ol>
-            <li><strong>Host code:</strong> CPU calls <code>cudaLaunchKernel()</code> or uses <code><<<>>></code> syntax</li>
-            <li><strong>Driver:</strong> CUDA driver validates parameters, allocates resources, and enqueues the kernel</li>
-            <li><strong>Command processor:</strong> GPU hardware receives the command packet</li>
-            <li><strong>Grid management unit:</strong> Breaks the grid into thread blocks</li>
-            <li><strong>Block scheduler:</strong> Assigns blocks to available SMs (Streaming Multiprocessors)</li>
-            <li><strong>Warp scheduler:</strong> Within each SM, breaks blocks into warps and schedules them on SIMD units</li>
-            <li><strong>Execution:</strong> Warps execute instructions, access memory, synchronize</li>
-            <li><strong>Completion:</strong> When all blocks finish, kernel is marked complete</li>
-        </ol>
-
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 11px;">
-Kernel Launch Flow:
-┌─────────────┐
-│ CPU (Host)  │  cudaLaunchKernel(myKernel, grid, block, args)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ CUDA Driver                                                 │
-│  - Validate grid/block dims                                 │
-│  - Check resource requirements (registers, shared memory)   │
-│  - Build command packet                                     │
-└──────┬──────────────────────────────────────────────────────┘
-       │ PCIe / NVLink
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ GPU Command Processor                                       │
-│  - Receive kernel launch command                            │
-│  - Pass to Grid Management Unit                             │
-└──────┬──────────────────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Grid Management Unit (GMU)                                  │
-│  - Calculate total blocks: gridDim.x × gridDim.y × gridDim.z│
-│  - Dispatch blocks to SMs                                   │
-└──────┬──────────────────────────────────────────────────────┘
-       │
-       ▼
-┌────────────────────┬────────────────────┬──────────────────┐
-│ SM 0               │ SM 1               │ SM 2 ... SM N    │
-│ ┌────────────────┐ │ ┌────────────────┐ │ ┌──────────────┐ │
-│ │ Blocks 0,3,6...│ │ │ Blocks 1,4,7...│ │ │ Blocks 2,5...│ │
-│ │                │ │ │                │ │ │              │ │
-│ │ Warp Scheduler │ │ │ Warp Scheduler │ │ │ Warp Sched.  │ │
-│ │   ↓  ↓  ↓      │ │ │   ↓  ↓  ↓      │ │ │   ↓  ↓       │ │
-│ │ SIMD  SIMD SIMD│ │ │ SIMD  SIMD SIMD│ │ │ SIMD SIMD    │ │
-│ └────────────────┘ │ └────────────────┘ │ └──────────────┘ │
-└────────────────────┴────────────────────┴──────────────────┘
-            </pre>
-            <div class="figure-caption">Figure 3.6: Kernel launch execution flow</div>
+            <div class="mermaid">
+flowchart TB
+    subgraph HOST["Host (CPU)"]
+        LAUNCH["cudaLaunchKernel()"]
+    end
+    
+    subgraph DRIVER["CUDA Driver"]
+        VALIDATE["Validate params"]
+        PACKET["Build command packet"]
+    end
+    
+    subgraph GPU["GPU Hardware"]
+        CMD["Command Processor"]
+        GMU["Grid Management Unit"]
+        
+        subgraph SMs["Streaming Multiprocessors"]
+            SM0["SM 0<br/>Blocks 0,3,6..."]
+            SM1["SM 1<br/>Blocks 1,4,7..."]
+            SM2["SM 2<br/>Blocks 2,5,8..."]
+        end
+    end
+    
+    LAUNCH --> VALIDATE
+    VALIDATE --> PACKET
+    PACKET -->|PCIe/NVLink| CMD
+    CMD --> GMU
+    GMU --> SM0
+    GMU --> SM1
+    GMU --> SM2
+    
+    style HOST fill:#dbeafe,stroke:#3b82f6
+    style DRIVER fill:#fef3c7,stroke:#f59e0b
+    style GPU fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.8: Kernel launch execution flow from CPU to GPU</div>
         </div>
 
         <h3>Resource Constraints</h3>
         <p>
-            Each SM has limited resources. The number of blocks that can run simultaneously depends on:
+            Each SM has limited resources. The number of concurrent blocks depends on:
         </p>
-
         <ul>
-            <li><strong>Registers:</strong> If your kernel uses 64 registers/thread and the SM has 65536 registers, you can run at most 1024 threads (assuming no other limits)</li>
-            <li><strong>Shared memory:</strong> If your block uses 16 KB shared memory and the SM has 64 KB, you can run at most 4 blocks</li>
-            <li><strong>Thread slots:</strong> SM might have a hard limit (e.g., 2048 threads max)</li>
-            <li><strong>Block slots:</strong> SM might support only 16-32 blocks simultaneously</li>
+            <li><strong>Registers:</strong> If kernel uses 64 regs/thread and SM has 65536 registers → max 1024 threads</li>
+            <li><strong>Shared memory:</strong> If block uses 16KB and SM has 64KB → max 4 blocks</li>
+            <li><strong>Thread slots:</strong> SM might limit to 2048 threads max</li>
+            <li><strong>Block slots:</strong> SM might support 16-32 blocks max</li>
         </ul>
 
         <div class="engineer-note">
@@ -748,243 +600,134 @@ Kernel Launch Flow:
 
         <h2>3.7 Synchronization Primitives</h2>
 
-        <h3>Block-Level Synchronization</h3>
-        <p>
-            Threads within a block can synchronize using <code>__syncthreads()</code>:
-        </p>
-
+        <h3>Block-Level: __syncthreads()</h3>
         <div class="code-block">
 <pre>__global__ void reductionKernel(float *input, float *output) {
-    __shared__ float shared[256];  // Shared memory
+    __shared__ float shared[256];
     
     int tid = threadIdx.x;
     shared[tid] = input[blockIdx.x * blockDim.x + tid];
     
-    __syncthreads();  // Wait for all threads to load data
+    __syncthreads();  // Wait for all threads to load
     
     // Reduction in shared memory
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
         if (tid < stride) {
             shared[tid] += shared[tid + stride];
         }
-        __syncthreads();  // Wait for this reduction step
+        __syncthreads();  // Wait for each step
     }
     
-    if (tid == 0) {
-        output[blockIdx.x] = shared[0];
-    }
-}
-</pre>
+    if (tid == 0) output[blockIdx.x] = shared[0];
+}</pre>
         </div>
 
-        <p>
-            <strong>Key rules for <code>__syncthreads()</code>:</strong>
-        </p>
-        <ul>
-            <li>ALL threads in the block must reach the same <code>__syncthreads()</code> call</li>
-            <li>Cannot be inside divergent code (leads to deadlock)</li>
-            <li>Acts as both a memory fence and execution barrier</li>
-        </ul>
-
         <h3>Atomic Operations</h3>
-        <p>
-            For race-free updates to shared data:
-        </p>
-
         <div class="code-block">
 <pre>__global__ void histogram(int *input, int *bins, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
         int bin = input[i];
-        atomicAdd(&bins[bin], 1);  // Atomic increment
+        atomicAdd(&bins[bin], 1);  // Race-free increment
     }
-}
-</pre>
+}</pre>
         </div>
 
-        <p>
-            Common atomic operations:
-        </p>
-        <ul>
-            <li><code>atomicAdd()</code>, <code>atomicSub()</code></li>
-            <li><code>atomicMin()</code>, <code>atomicMax()</code></li>
-            <li><code>atomicExch()</code> (exchange)</li>
-            <li><code>atomicCAS()</code> (compare-and-swap)</li>
-        </ul>
+        <h2>3.8 Practical Patterns</h2>
 
-        <h3>Grid-Level Synchronization</h3>
-        <p>
-            Before CUDA 9, there was no way to synchronize across blocks. Now you can use:
-        </p>
-
-        <div class="code-block">
-<pre>// Cooperative groups (CUDA 9+)
-#include <cooperative_groups.h>
-
-__global__ void cooperativeKernel(float *data) {
-    cooperative_groups::grid_group grid = 
-        cooperative_groups::this_grid();
+        <h3>Pattern 1: Parallel Reduction</h3>
+        <div class="figure">
+            <div class="mermaid">
+flowchart TB
+    subgraph INPUT["Input (8 elements)"]
+        direction LR
+        A["1"] ~~~ B["2"] ~~~ C["3"] ~~~ D["4"] ~~~ E["5"] ~~~ F["6"] ~~~ G["7"] ~~~ H["8"]
+    end
     
-    // Do work...
+    subgraph STEP1["Step 1: Stride = 4"]
+        direction LR
+        S1A["1+5=6"] ~~~ S1B["2+6=8"] ~~~ S1C["3+7=10"] ~~~ S1D["4+8=12"]
+    end
     
-    grid.sync();  // All blocks wait here
+    subgraph STEP2["Step 2: Stride = 2"]
+        direction LR
+        S2A["6+10=16"] ~~~ S2B["8+12=20"]
+    end
     
-    // Continue...
-}
-
-// Must launch with cudaLaunchCooperativeKernel()
-</pre>
+    subgraph STEP3["Step 3: Stride = 1"]
+        RESULT["16+20=36"]
+    end
+    
+    INPUT --> STEP1 --> STEP2 --> STEP3
+    
+    style RESULT fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.9: Parallel reduction pattern — O(log n) steps</div>
         </div>
 
-        <h2>3.8 Practical Examples and Patterns</h2>
-
-        <h3>Example 1: Matrix Multiplication (Naive)</h3>
-
-        <div class="code-block">
-<pre>__global__ void matMulNaive(float *A, float *B, float *C, int N) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+        <h3>Pattern 2: Matrix Multiplication</h3>
+        <div class="figure">
+            <div class="mermaid">
+flowchart LR
+    subgraph NAIVE["Naive: Each thread reads entire row/column"]
+        A["Matrix A"] --> T["Thread (i,j)"]
+        B["Matrix B"] --> T
+        T --> C["C[i,j]"]
+    end
     
-    if (row < N && col < N) {
-        float sum = 0.0f;
-        for (int k = 0; k < N; k++) {
-            sum += A[row * N + k] * B[k * N + col];
-        }
-        C[row * N + col] = sum;
-    }
-}
-
-// Launch: dim3 block(16, 16); dim3 grid((N+15)/16, (N+15)/16);
-//         matMulNaive<<<grid, block>>>(d_A, d_B, d_C, N);
-</pre>
-        </div>
-
-        <p>
-            This is simple but slow — lots of redundant global memory accesses. We'll optimize this in Chapter 7 
-            using shared memory tiling.
-        </p>
-
-        <h3>Example 2: Reduction (Sum All Elements)</h3>
-
-        <div class="code-block">
-<pre>__global__ void reduceSum(float *input, float *output, int N) {
-    __shared__ float sdata[256];
+    subgraph TILED["Tiled: Threads share data via shared memory"]
+        AT["A Tile"] --> SM["Shared Memory"]
+        BT["B Tile"] --> SM
+        SM --> TC["All threads in block"]
+        TC --> CT["C Tile"]
+    end
     
-    int tid = threadIdx.x;
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // Load and reduce across grid stride
-    float sum = 0.0f;
-    while (i < N) {
-        sum += input[i];
-        i += blockDim.x * gridDim.x;
-    }
-    sdata[tid] = sum;
-    __syncthreads();
-    
-    // Reduce within block
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] += sdata[tid + s];
-        }
-        __syncthreads();
-    }
-    
-    // Write result
-    if (tid == 0) {
-        output[blockIdx.x] = sdata[0];
-    }
-}
-</pre>
-        </div>
-
-        <h3>Example 3: Scan (Prefix Sum)</h3>
-
-        <div class="code-block">
-<pre>// Kogge-Stone parallel scan (work-efficient version in later chapters)
-__global__ void scanKoggeStone(float *input, float *output, int N) {
-    __shared__ float temp[256];
-    
-    int tid = threadIdx.x;
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    temp[tid] = (i < N) ? input[i] : 0.0f;
-    __syncthreads();
-    
-    // Up-sweep
-    for (int stride = 1; stride < blockDim.x; stride *= 2) {
-        int index = (tid + 1) * stride * 2 - 1;
-        if (index < blockDim.x) {
-            temp[index] += temp[index - stride];
-        }
-        __syncthreads();
-    }
-    
-    if (i < N) {
-        output[i] = temp[tid];
-    }
-}
-</pre>
+    style TILED fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 3.10: Naive vs tiled matrix multiplication</div>
         </div>
 
         <h2>3.9 Chapter Summary</h2>
 
-        <p>
-            In this chapter, we explored the parallel execution models that make GPUs work:
-        </p>
-
         <ul>
-            <li><strong>SIMD:</strong> Single instruction operates on multiple data elements simultaneously</li>
+            <li><strong>SIMD:</strong> Single instruction operates on multiple data elements</li>
             <li><strong>SIMT:</strong> NVIDIA's innovation — threads in software, SIMD in hardware</li>
             <li><strong>Thread hierarchy:</strong> Threads → Warps → Blocks → Grids</li>
             <li><strong>Divergence:</strong> When threads in a warp take different paths, execution serializes</li>
-            <li><strong>Programming models:</strong> CUDA (NVIDIA), OpenCL (portable), HIP (AMD)</li>
-            <li><strong>Kernel launch:</strong> How code gets from CPU to GPU execution units</li>
-            <li><strong>Synchronization:</strong> <code>__syncthreads()</code>, atomics, cooperative groups</li>
-            <li><strong>Patterns:</strong> Matrix multiply, reduction, scan — building blocks for complex algorithms</li>
+            <li><strong>Programming models:</strong> CUDA, OpenCL, HIP</li>
+            <li><strong>Synchronization:</strong> __syncthreads(), atomics, cooperative groups</li>
+            <li><strong>Patterns:</strong> Reduction, matrix multiply, scan</li>
         </ul>
 
         <div class="key-takeaway">
             <strong>Next Steps:</strong> In Chapter 4, we'll dive into the actual hardware components that 
-            implement these execution models — ALUs, register files, schedulers, and load/store units. 
-            You'll see how the programming abstractions map to real silicon.
+            implement these execution models — ALUs, register files, schedulers, and load/store units.
         </div>
 
         <div class="exercise">
             <strong>Exercise 3.1:</strong> Write a CUDA kernel that multiplies every element of an array by 2. 
-            Launch it with 1024 threads per block. How many blocks do you need for an array of 1 million elements?
+            How many blocks do you need for 1 million elements with 256 threads per block?
         </div>
 
         <div class="exercise">
-            <strong>Exercise 3.2:</strong> Analyze this code: Will it diverge? Why or why not?
-            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px;">
-if (threadIdx.x < 16) {
-    expensiveComputation();
-}</pre>
+            <strong>Exercise 3.2:</strong> Will this code diverge? Why?
+            <code style="display: block; margin-top: 10px; padding: 10px; background: #f5f5f5;">if (threadIdx.x < 16) { expensiveComputation(); }</code>
         </div>
 
         <div class="exercise">
-            <strong>Exercise 3.3:</strong> Modify the reduction kernel to find the maximum value instead of the sum. 
-            Test it on a random array.
+            <strong>Exercise 3.3:</strong> Modify the reduction kernel to find the maximum value instead of sum.
         </div>
 
         <div class="exercise">
-            <strong>Exercise 3.4:</strong> Implement a 2D convolution kernel (3×3 filter). Each thread computes 
-            one output pixel. Handle boundary conditions.
-        </div>
-
-        <div class="exercise">
-            <strong>Exercise 3.5:</strong> Measure the performance impact of divergence. Write two kernels: 
-            one with heavy divergence (<code>if (threadIdx.x % 2)</code>) and one without. Compare execution times.
+            <strong>Exercise 3.4:</strong> Implement a 2D convolution kernel (3×3 filter). Each thread computes one output pixel.
         </div>
 
         <h2>Further Reading</h2>
         <ul>
-            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#simt-architecture" target="_blank">NVIDIA CUDA Programming Guide: SIMT Architecture</a></li>
-            <li><a href="https://developer.nvidia.com/blog/using-cuda-warp-level-primitives/" target="_blank">NVIDIA Developer Blog: Warp-Level Primitives</a></li>
-            <li>"Programming Massively Parallel Processors" Chapter 4: Thread Execution and Divergence</li>
-            <li>Paper: "Demystifying GPU Microarchitecture through Microbenchmarking" (ISPASS 2010)</li>
-            <li><a href="https://github.com/nvixnu/pmpp__programming_massively_parallel_processors" target="_blank">PMPP GitHub: Chapter 3-5 Code Examples</a></li>
+            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#simt-architecture">NVIDIA CUDA Guide: SIMT Architecture</a></li>
+            <li><a href="https://developer.nvidia.com/blog/using-cuda-warp-level-primitives/">NVIDIA Blog: Warp-Level Primitives</a></li>
+            <li>"Programming Massively Parallel Processors" Ch. 4: Thread Execution</li>
+            <li>Paper: "Demystifying GPU Microarchitecture through Microbenchmarking"</li>
         </ul>
 
         <div class="chapter-nav">
@@ -993,5 +736,21 @@ if (threadIdx.x < 16) {
             <a href="chapter-04.html">Next: Core Components →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#6366f1',
+                primaryTextColor: '#1e293b',
+                primaryBorderColor: '#4f46e5',
+                lineColor: '#64748b',
+                secondaryColor: '#10b981',
+                tertiaryColor: '#f1f5f9'
+            }
+        });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

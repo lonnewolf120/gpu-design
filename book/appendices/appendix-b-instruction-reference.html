@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appendix B: Instruction Set Reference - Tiny-GPU Architecture Guide</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <style>
+        .instruction-card {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .instruction-card h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-family: 'Courier New', monospace;
+            font-size: 1.5rem;
+        }
+        .instruction-meta {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .instruction-meta div {
+            background: var(--background-color);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+        }
+        .instruction-meta label {
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+        .bit-diagram {
+            font-family: 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .bit-diagram .bit-header {
+            color: #6a9955;
+            margin-bottom: 0.5rem;
+        }
+        .bit-diagram .bit-field {
+            display: inline-block;
+            text-align: center;
+            border: 1px solid #555;
+            padding: 0.25rem 0;
+            margin: 0;
+        }
+        .bit-diagram .bit-field.opcode { background: #264f78; }
+        .bit-diagram .bit-field.rd { background: #4e7a3e; }
+        .bit-diagram .bit-field.rs1 { background: #7a4e3e; }
+        .bit-diagram .bit-field.rs2 { background: #7a6a3e; }
+        .bit-diagram .bit-field.imm { background: #5e3e7a; }
+        .bit-diagram .bit-field.cond { background: #3e5e7a; }
+        .example-box {
+            background: #282c34;
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0 4px 4px 0;
+        }
+        .opcode-table {
+            width: 100%;
+            margin: 1rem 0;
+        }
+        .opcode-table th {
+            background: var(--primary-color);
+            color: white;
+        }
+        .opcode-table td, .opcode-table th {
+            padding: 0.75rem;
+            text-align: center;
+        }
+        .register-table td:first-child {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="appendix-a-glossary.html" class="nav-link">← Prev: Appendix A</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-c-module-reference.html" class="nav-link">Next: Appendix C →</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Appendix B</div>
+        <h1>Instruction Set Reference</h1>
+        <p class="chapter-subtitle">Complete ISA Documentation for Tiny-GPU</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="overview">
+            <h2>ISA Overview</h2>
+            <p>Tiny-GPU implements a minimal but complete instruction set with 11 operations. All instructions are 16 bits wide, enabling simple decoding and compact program memory.</p>
+            
+            <div class="mermaid">
+flowchart LR
+    subgraph ARITHMETIC["Arithmetic (6)"]
+        ADD[ADD]
+        SUB[SUB]
+        MUL[MUL]
+        DIV[DIV]
+        CMP[CMP]
+    end
+    
+    subgraph LOGICAL["Logical (4)"]
+        AND[AND]
+        OR[OR]
+        NOT[NOT]
+        XOR[XOR]
+    end
+    
+    subgraph MEMORY["Memory (2)"]
+        LDR[LDR]
+        STR[STR]
+    end
+    
+    subgraph CONST["Constant (1)"]
+        CONST_OP[CONST]
+    end
+    
+    subgraph CONTROL["Control (2)"]
+        BRnzp[BRnzp]
+        RET[RET]
+    end
+            </div>
+        </section>
+
+        <section id="instruction-formats">
+            <h2>Instruction Formats</h2>
+            <p>Tiny-GPU uses three instruction formats depending on the operation type:</p>
+            
+            <h3>R-Type (Register-Register)</h3>
+            <p>Used for arithmetic and logical operations with two source registers.</p>
+            <div class="bit-diagram">
+                <div class="bit-header">Bits: 15-12    11-8     7-4      3-0</div>
+                <div>
+                    <span class="bit-field opcode" style="width: 80px;">OPCODE<br/>4 bits</span>
+                    <span class="bit-field rd" style="width: 80px;">RD<br/>4 bits</span>
+                    <span class="bit-field rs1" style="width: 80px;">RS1<br/>4 bits</span>
+                    <span class="bit-field rs2" style="width: 80px;">RS2<br/>4 bits</span>
+                </div>
+            </div>
+            
+            <h3>I-Type (Immediate)</h3>
+            <p>Used for CONST instruction to load immediate values.</p>
+            <div class="bit-diagram">
+                <div class="bit-header">Bits: 15-12    11-8     7-0</div>
+                <div>
+                    <span class="bit-field opcode" style="width: 80px;">OPCODE<br/>4 bits</span>
+                    <span class="bit-field rd" style="width: 80px;">RD<br/>4 bits</span>
+                    <span class="bit-field imm" style="width: 160px;">IMMEDIATE<br/>8 bits</span>
+                </div>
+            </div>
+            
+            <h3>B-Type (Branch)</h3>
+            <p>Used for conditional branch instructions.</p>
+            <div class="bit-diagram">
+                <div class="bit-header">Bits: 15-12   11-9    8-0</div>
+                <div>
+                    <span class="bit-field opcode" style="width: 80px;">OPCODE<br/>4 bits</span>
+                    <span class="bit-field cond" style="width: 60px;">NZP<br/>3 bits</span>
+                    <span class="bit-field imm" style="width: 180px;">PC OFFSET<br/>9 bits</span>
+                </div>
+            </div>
+        </section>
+
+        <section id="opcode-summary">
+            <h2>Opcode Summary</h2>
+            <table class="opcode-table">
+                <thead>
+                    <tr>
+                        <th>Opcode</th>
+                        <th>Binary</th>
+                        <th>Mnemonic</th>
+                        <th>Format</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>0</td><td>0000</td><td>ADD</td><td>R</td><td>Addition</td></tr>
+                    <tr><td>1</td><td>0001</td><td>SUB</td><td>R</td><td>Subtraction</td></tr>
+                    <tr><td>2</td><td>0010</td><td>MUL</td><td>R</td><td>Multiplication</td></tr>
+                    <tr><td>3</td><td>0011</td><td>DIV</td><td>R</td><td>Division</td></tr>
+                    <tr><td>4</td><td>0100</td><td>AND</td><td>R</td><td>Bitwise AND</td></tr>
+                    <tr><td>5</td><td>0101</td><td>OR</td><td>R</td><td>Bitwise OR</td></tr>
+                    <tr><td>6</td><td>0110</td><td>NOT</td><td>R</td><td>Bitwise NOT</td></tr>
+                    <tr><td>7</td><td>0111</td><td>XOR</td><td>R</td><td>Bitwise XOR</td></tr>
+                    <tr><td>8</td><td>1000</td><td>CMP</td><td>R</td><td>Compare (sets NZP)</td></tr>
+                    <tr><td>9</td><td>1001</td><td>LDR</td><td>R</td><td>Load from memory</td></tr>
+                    <tr><td>10</td><td>1010</td><td>STR</td><td>R</td><td>Store to memory</td></tr>
+                    <tr><td>11</td><td>1011</td><td>CONST</td><td>I</td><td>Load immediate</td></tr>
+                    <tr><td>12</td><td>1100</td><td>BRnzp</td><td>B</td><td>Conditional branch</td></tr>
+                    <tr><td>13</td><td>1101</td><td>RET</td><td>-</td><td>Return (end kernel)</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="registers">
+            <h2>Register Reference</h2>
+            <p>Each thread has access to 16 registers (R0–R15):</p>
+            
+            <table class="register-table">
+                <thead>
+                    <tr>
+                        <th>Register</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>R0</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R1</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R2</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R3</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R4</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R5</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R6</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R7</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R8</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R9</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R10</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R11</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R12</td><td>-</td><td>General</td><td>General purpose register</td></tr>
+                    <tr><td>R13</td><td>%blockIdx</td><td>Read-Only</td><td>Current block index</td></tr>
+                    <tr><td>R14</td><td>%blockDim</td><td>Read-Only</td><td>Threads per block</td></tr>
+                    <tr><td>R15</td><td>%threadIdx</td><td>Read-Only</td><td>Thread index within block</td></tr>
+                </tbody>
+            </table>
+            
+            <div class="info-box">
+                <p><strong>Computing Global Thread ID:</strong></p>
+                <pre><code class="language-asm">; global_id = blockIdx * blockDim + threadIdx
+MUL  R0, R13, R14    ; R0 = blockIdx * blockDim
+ADD  R0, R0, R15     ; R0 = R0 + threadIdx</code></pre>
+            </div>
+        </section>
+
+        <section id="instruction-details">
+            <h2>Detailed Instruction Reference</h2>
+            
+            <!-- ADD -->
+            <div class="instruction-card">
+                <h3>ADD — Addition</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0000 (0)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>ADD RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 + RS2</p>
+                <p><strong>Description:</strong> Adds the values in RS1 and RS2, storing the result in RD. Sets NZP flags based on the result.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">ADD R0, R1, R2    ; R0 = R1 + R2</code></pre>
+                    <p>Binary encoding: <code>0000 0000 0001 0010</code> = 0x0012</p>
+                </div>
+            </div>
+            
+            <!-- SUB -->
+            <div class="instruction-card">
+                <h3>SUB — Subtraction</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0001 (1)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>SUB RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 - RS2</p>
+                <p><strong>Description:</strong> Subtracts RS2 from RS1, storing the result in RD. Sets NZP flags based on the result.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">SUB R3, R4, R5    ; R3 = R4 - R5</code></pre>
+                    <p>Binary encoding: <code>0001 0011 0100 0101</code> = 0x1345</p>
+                </div>
+            </div>
+            
+            <!-- MUL -->
+            <div class="instruction-card">
+                <h3>MUL — Multiplication</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0010 (2)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>MUL RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 × RS2</p>
+                <p><strong>Description:</strong> Multiplies RS1 by RS2, storing the lower bits of the result in RD. Sets NZP flags based on the result.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">MUL R0, R13, R14  ; R0 = blockIdx * blockDim</code></pre>
+                    <p>Binary encoding: <code>0010 0000 1101 1110</code> = 0x20DE</p>
+                </div>
+            </div>
+            
+            <!-- DIV -->
+            <div class="instruction-card">
+                <h3>DIV — Division</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0011 (3)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>DIV RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 ÷ RS2</p>
+                <p><strong>Description:</strong> Divides RS1 by RS2 (integer division), storing the quotient in RD. Division by zero behavior is undefined.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">DIV R6, R7, R8    ; R6 = R7 / R8</code></pre>
+                    <p>Binary encoding: <code>0011 0110 0111 1000</code> = 0x3678</p>
+                </div>
+            </div>
+            
+            <!-- AND -->
+            <div class="instruction-card">
+                <h3>AND — Bitwise AND</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0100 (4)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>AND RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 & RS2</p>
+                <p><strong>Description:</strong> Performs bitwise AND on RS1 and RS2, storing the result in RD.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">AND R0, R1, R2    ; R0 = R1 & R2</code></pre>
+                </div>
+            </div>
+            
+            <!-- OR -->
+            <div class="instruction-card">
+                <h3>OR — Bitwise OR</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0101 (5)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>OR RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 | RS2</p>
+                <p><strong>Description:</strong> Performs bitwise OR on RS1 and RS2, storing the result in RD.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">OR R3, R4, R5     ; R3 = R4 | R5</code></pre>
+                </div>
+            </div>
+            
+            <!-- NOT -->
+            <div class="instruction-card">
+                <h3>NOT — Bitwise NOT</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0110 (6)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>NOT RD, RS1</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← ~RS1</p>
+                <p><strong>Description:</strong> Performs bitwise NOT (complement) on RS1, storing the result in RD. RS2 field is ignored.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">NOT R0, R1        ; R0 = ~R1</code></pre>
+                </div>
+            </div>
+            
+            <!-- XOR -->
+            <div class="instruction-card">
+                <h3>XOR — Bitwise XOR</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 0111 (7)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>XOR RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 ^ RS2</p>
+                <p><strong>Description:</strong> Performs bitwise XOR on RS1 and RS2, storing the result in RD.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">XOR R6, R7, R8    ; R6 = R7 ^ R8</code></pre>
+                </div>
+            </div>
+            
+            <!-- CMP -->
+            <div class="instruction-card">
+                <h3>CMP — Compare</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1000 (8)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>CMP RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← RS1 - RS2; set NZP flags</p>
+                <p><strong>Description:</strong> Computes RS1 - RS2 and stores in RD. Sets NZP flags based on the result. Typically used before conditional branches.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">CMP R0, R1, R2    ; Compare R1 and R2
+BRn LESS          ; Branch if R1 < R2</code></pre>
+                </div>
+            </div>
+            
+            <!-- LDR -->
+            <div class="instruction-card">
+                <h3>LDR — Load Register</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1001 (9)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>LDR RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← Memory[RS1 + RS2]</p>
+                <p><strong>Description:</strong> Loads a value from data memory at address (RS1 + RS2) into RD. This initiates a memory request through the controller.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">; Load from address in R1 with offset in R2
+LDR R3, R1, R2    ; R3 = Memory[R1 + R2]
+
+; Load with zero offset
+CONST R4, 0
+LDR R5, R1, R4    ; R5 = Memory[R1]</code></pre>
+                </div>
+            </div>
+            
+            <!-- STR -->
+            <div class="instruction-card">
+                <h3>STR — Store Register</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1010 (10)</div>
+                    <div><label>Format:</label> R-Type</div>
+                    <div><label>Syntax:</label> <code>STR RD, RS1, RS2</code></div>
+                </div>
+                <p><strong>Operation:</strong> Memory[RS1 + RS2] ← RD</p>
+                <p><strong>Description:</strong> Stores the value in RD to data memory at address (RS1 + RS2). This initiates a memory write request through the controller.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">; Store R0 to address (R1 + R2)
+STR R0, R1, R2    ; Memory[R1 + R2] = R0</code></pre>
+                </div>
+            </div>
+            
+            <!-- CONST -->
+            <div class="instruction-card">
+                <h3>CONST — Load Constant</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1011 (11)</div>
+                    <div><label>Format:</label> I-Type</div>
+                    <div><label>Syntax:</label> <code>CONST RD, imm8</code></div>
+                </div>
+                <p><strong>Operation:</strong> RD ← imm8 (zero-extended)</p>
+                <p><strong>Description:</strong> Loads an 8-bit immediate value into RD, zero-extended to the register width. Used for loading constants and base addresses.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">CONST R0, 0       ; R0 = 0 (base address for matrix A)
+CONST R1, 16      ; R1 = 16 (base address for matrix B)
+CONST R2, 32      ; R2 = 32 (base address for result)</code></pre>
+                </div>
+            </div>
+            
+            <!-- BRnzp -->
+            <div class="instruction-card">
+                <h3>BRnzp — Conditional Branch</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1100 (12)</div>
+                    <div><label>Format:</label> B-Type</div>
+                    <div><label>Syntax:</label> <code>BRnzp offset</code></div>
+                </div>
+                <p><strong>Operation:</strong> if (condition matches NZP) PC ← PC + offset</p>
+                <p><strong>Description:</strong> Conditionally branches based on NZP flags. The 3-bit condition field (n, z, p) specifies which flag combinations trigger the branch. The 9-bit signed offset is added to PC if the condition is met.</p>
+                
+                <table class="opcode-table" style="margin-top: 1rem;">
+                    <thead>
+                        <tr><th>Condition</th><th>N</th><th>Z</th><th>P</th><th>Meaning</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>BRn</td><td>1</td><td>0</td><td>0</td><td>Branch if negative</td></tr>
+                        <tr><td>BRz</td><td>0</td><td>1</td><td>0</td><td>Branch if zero</td></tr>
+                        <tr><td>BRp</td><td>0</td><td>0</td><td>1</td><td>Branch if positive</td></tr>
+                        <tr><td>BRnz</td><td>1</td><td>1</td><td>0</td><td>Branch if ≤ 0</td></tr>
+                        <tr><td>BRnp</td><td>1</td><td>0</td><td>1</td><td>Branch if ≠ 0</td></tr>
+                        <tr><td>BRzp</td><td>0</td><td>1</td><td>1</td><td>Branch if ≥ 0</td></tr>
+                        <tr><td>BRnzp</td><td>1</td><td>1</td><td>1</td><td>Unconditional branch</td></tr>
+                    </tbody>
+                </table>
+                
+                <div class="example-box">
+                    <pre><code class="language-asm">; Loop example
+LOOP:
+    ; ... loop body ...
+    SUB R0, R0, R1    ; Decrement counter
+    BRp LOOP          ; Branch back if positive
+
+; Unconditional jump
+BRnzp TARGET          ; Always branch to TARGET</code></pre>
+                </div>
+            </div>
+            
+            <!-- RET -->
+            <div class="instruction-card">
+                <h3>RET — Return / End Kernel</h3>
+                <div class="instruction-meta">
+                    <div><label>Opcode:</label> 1101 (13)</div>
+                    <div><label>Format:</label> Special</div>
+                    <div><label>Syntax:</label> <code>RET</code></div>
+                </div>
+                <p><strong>Operation:</strong> Signal thread/block completion</p>
+                <p><strong>Description:</strong> Signals that the current thread has completed execution. When all threads in a block reach RET, the block is complete and the core becomes available for a new block assignment.</p>
+                <div class="example-box">
+                    <pre><code class="language-asm">; End of kernel
+STR R0, R2, R3    ; Store final result
+RET               ; Signal completion</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="encoding-examples">
+            <h2>Encoding Examples</h2>
+            <p>This section shows how assembly instructions are encoded into 16-bit machine code.</p>
+            
+            <h3>Example 1: Compute Global Thread ID</h3>
+            <pre><code class="language-asm">MUL R0, R13, R14    ; R0 = blockIdx * blockDim
+ADD R0, R0, R15     ; R0 = R0 + threadIdx</code></pre>
+            
+            <div class="mermaid">
+flowchart LR
+    subgraph MUL["MUL R0, R13, R14"]
+        M_OP["0010<br/>opcode"] --> M_RD["0000<br/>RD=R0"]
+        M_RD --> M_RS1["1101<br/>RS1=R13"]
+        M_RS1 --> M_RS2["1110<br/>RS2=R14"]
+    end
+    
+    subgraph ADD["ADD R0, R0, R15"]
+        A_OP["0000<br/>opcode"] --> A_RD["0000<br/>RD=R0"]
+        A_RD --> A_RS1["0000<br/>RS1=R0"]
+        A_RS1 --> A_RS2["1111<br/>RS2=R15"]
+    end
+    
+    MUL --> |"0x20DE"| HEX1[Machine Code]
+    ADD --> |"0x000F"| HEX2[Machine Code]
+            </div>
+            
+            <h3>Example 2: Load, Add, Store Pattern</h3>
+            <pre><code class="language-asm">CONST R0, 0         ; Base address of array A
+CONST R1, 16        ; Base address of array B  
+CONST R2, 32        ; Base address of output C
+LDR R3, R0, R15     ; Load A[threadIdx]
+LDR R4, R1, R15     ; Load B[threadIdx]
+ADD R5, R3, R4      ; R5 = A[threadIdx] + B[threadIdx]
+STR R5, R2, R15     ; Store to C[threadIdx]
+RET                 ; Done</code></pre>
+            
+            <table class="opcode-table">
+                <thead>
+                    <tr><th>Instruction</th><th>Binary</th><th>Hex</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>CONST R0, 0</td><td>1011 0000 0000 0000</td><td>0xB000</td></tr>
+                    <tr><td>CONST R1, 16</td><td>1011 0001 0001 0000</td><td>0xB110</td></tr>
+                    <tr><td>CONST R2, 32</td><td>1011 0010 0010 0000</td><td>0xB220</td></tr>
+                    <tr><td>LDR R3, R0, R15</td><td>1001 0011 0000 1111</td><td>0x930F</td></tr>
+                    <tr><td>LDR R4, R1, R15</td><td>1001 0100 0001 1111</td><td>0x941F</td></tr>
+                    <tr><td>ADD R5, R3, R4</td><td>0000 0101 0011 0100</td><td>0x0534</td></tr>
+                    <tr><td>STR R5, R2, R15</td><td>1010 0101 0010 1111</td><td>0xA52F</td></tr>
+                    <tr><td>RET</td><td>1101 0000 0000 0000</td><td>0xD000</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="pipeline-timing">
+            <h2>Pipeline Timing</h2>
+            <p>Each instruction passes through the following stages:</p>
+            
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --> FETCH: Start
+    FETCH --> DECODE: Instruction ready
+    DECODE --> REQUEST: Decoded
+    REQUEST --> WAIT: Memory request sent
+    WAIT --> EXECUTE: Data ready
+    EXECUTE --> UPDATE: Result computed
+    UPDATE --> FETCH: Next instruction
+    UPDATE --> [*]: RET instruction
+    
+    note right of FETCH: Read from program memory
+    note right of DECODE: Parse instruction fields
+    note right of REQUEST: Send memory request (LDR/STR)
+    note right of WAIT: Wait for memory response
+    note right of EXECUTE: ALU/LSU operation
+    note right of UPDATE: Write back result
+            </div>
+            
+            <p><strong>Note:</strong> Memory operations (LDR, STR) require the REQUEST and WAIT stages for memory handshaking. ALU operations may have shorter effective latency depending on implementation.</p>
+        </section>
+    </main>
+
+    <nav class="chapter-nav bottom-nav">
+        <a href="appendix-a-glossary.html" class="nav-link">← Prev: Appendix A</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-c-module-reference.html" class="nav-link">Next: Appendix C →</a>
+    </nav>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'neutral',
+            flowchart: { useMaxWidth: true, htmlLabels: true }
+        });
+    </script>
+</body>
+</html>

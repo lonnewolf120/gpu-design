@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appendix A: Glossary of Terms - Tiny-GPU Architecture Guide</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="../table-of-contents.html" class="nav-link">← Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-b-instruction-reference.html" class="nav-link">Next: Appendix B →</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Appendix A</div>
+        <h1>Glossary of Terms</h1>
+        <p class="chapter-subtitle">Complete Reference of GPU Architecture Terminology</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="introduction">
+            <h2>About This Glossary</h2>
+            <p>This glossary provides definitions for all technical terms used throughout the Tiny-GPU Architecture Guide. Terms are organized alphabetically and cross-referenced where appropriate.</p>
+        </section>
+
+        <section id="glossary-a">
+            <h2>A</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="alu">ALU (Arithmetic Logic Unit)</h3>
+                <p>A digital circuit that performs arithmetic and bitwise logical operations. In Tiny-GPU, each thread has its own dedicated ALU that supports operations including addition, subtraction, multiplication, division, comparisons, and bitwise operations (AND, OR, NOT, XOR). See <code>src/alu.sv</code>.</p>
+                <p class="related">Related: <a href="#thread">Thread</a>, <a href="#execute-stage">Execute Stage</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="arbiter">Arbiter</h3>
+                <p>A circuit component that manages access when multiple requesters compete for a shared resource. The Tiny-GPU controller uses arbitration to handle memory requests from multiple cores.</p>
+                <p class="related">Related: <a href="#controller">Controller</a>, <a href="#memory-channel">Memory Channel</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-b">
+            <h2>B</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="block">Block (Thread Block)</h3>
+                <p>A grouping of threads that execute together on a single core and can share resources. In Tiny-GPU, blocks contain a fixed number of threads defined by <code>THREADS_PER_BLOCK</code>. Blocks are the unit of work distribution from the dispatcher to cores.</p>
+                <p class="related">Related: <a href="#thread">Thread</a>, <a href="#dispatch">Dispatch</a>, <a href="#blockidx">blockIdx</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="blockidx">blockIdx</h3>
+                <p>A read-only register (R13) that holds the current block's index. This allows kernels to compute unique global indices for each block's work assignment. Accessible as a special register that cannot be written by user code.</p>
+                <p class="related">Related: <a href="#block">Block</a>, <a href="#special-registers">Special Registers</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="blockdim">blockDim</h3>
+                <p>A read-only register (R14) that holds the number of threads per block. Used in combination with <code>blockIdx</code> and <code>threadIdx</code> to calculate global thread identifiers.</p>
+                <p class="related">Related: <a href="#block">Block</a>, <a href="#threadidx">threadIdx</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="branch-divergence">Branch Divergence</h3>
+                <p>A phenomenon where threads within the same execution group take different paths at a conditional branch. Tiny-GPU does <strong>not</strong> handle branch divergence—a design simplification that means all threads in a block must follow the same control flow path.</p>
+                <p class="related">Related: <a href="#simt">SIMT</a>, <a href="#brn-instruction">BRnzp</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="brn-instruction">BRnzp (Branch Instruction)</h3>
+                <p>The conditional branch instruction in Tiny-GPU's ISA. Uses NZP (Negative, Zero, Positive) condition codes to determine whether to branch. The 3-bit condition field specifies which conditions trigger the branch.</p>
+                <p class="related">Related: <a href="#nzp">NZP Flags</a>, <a href="#pc">Program Counter</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-c">
+            <h2>C</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="clock-cycle">Clock Cycle</h3>
+                <p>The basic unit of time in synchronous digital circuits. One cycle is the period between two consecutive rising (or falling) edges of the clock signal. All Tiny-GPU operations are synchronized to the clock.</p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="controller">Controller</h3>
+                <p>The memory controller module that arbitrates memory access between multiple cores. Manages channelized memory requests with proper handshaking for reads and writes. See <code>src/controller.sv</code>.</p>
+                <p class="related">Related: <a href="#memory-channel">Memory Channel</a>, <a href="#arbiter">Arbiter</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="core">Core</h3>
+                <p>A processing unit that executes one block of threads. Each Tiny-GPU core contains multiple thread execution units (ALUs, LSUs, PCs, register files), a shared scheduler, decoder, and fetcher. The GPU contains multiple cores for parallel block execution. See <code>src/core.sv</code>.</p>
+                <p class="related">Related: <a href="#thread">Thread</a>, <a href="#block">Block</a>, <a href="#scheduler">Scheduler</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-d">
+            <h2>D</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="dcr">DCR (Device Configuration Register)</h3>
+                <p>A hardware register that stores kernel launch configuration parameters. The DCR holds the device program counter, the number of blocks to launch, and signals for kernel start/completion. See <code>src/dcr.sv</code>.</p>
+                <p class="related">Related: <a href="#dispatch">Dispatch</a>, <a href="#kernel">Kernel</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="decode-stage">Decode Stage</h3>
+                <p>The pipeline stage where fetched instructions are parsed into their component fields (opcode, registers, immediate values). The decoder extracts control signals that direct the execution units. See <code>src/decoder.sv</code>.</p>
+                <p class="related">Related: <a href="#pipeline">Pipeline</a>, <a href="#opcode">Opcode</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="decoder">Decoder</h3>
+                <p>The hardware module that interprets instruction bit patterns and generates control signals. Parses the 16-bit instruction format to identify operations and operands.</p>
+                <p class="related">Related: <a href="#decode-stage">Decode Stage</a>, <a href="#isa">ISA</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="dispatch">Dispatch / Dispatcher</h3>
+                <p>The module responsible for assigning thread blocks to available cores. The dispatcher tracks which cores are busy, maintains a queue of pending blocks, and signals the DCR when all blocks complete. See <code>src/dispatch.sv</code>.</p>
+                <p class="related">Related: <a href="#dcr">DCR</a>, <a href="#core">Core</a>, <a href="#block">Block</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-e">
+            <h2>E</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="execute-stage">Execute Stage</h3>
+                <p>The pipeline stage where the actual computation occurs. The ALU performs arithmetic/logic operations, or the LSU performs memory access, depending on the instruction type.</p>
+                <p class="related">Related: <a href="#pipeline">Pipeline</a>, <a href="#alu">ALU</a>, <a href="#lsu">LSU</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-f">
+            <h2>F</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="fetch-stage">Fetch Stage</h3>
+                <p>The first pipeline stage where the next instruction is retrieved from program memory based on the current program counter value. See <code>src/fetcher.sv</code>.</p>
+                <p class="related">Related: <a href="#pipeline">Pipeline</a>, <a href="#pc">Program Counter</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="fetcher">Fetcher</h3>
+                <p>The hardware module that interfaces with program memory to retrieve instructions. Handles the memory request protocol for instruction fetch.</p>
+                <p class="related">Related: <a href="#fetch-stage">Fetch Stage</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="fsm">FSM (Finite State Machine)</h3>
+                <p>A computational model with a finite number of states, transitions between states, and outputs. The Tiny-GPU scheduler uses an FSM to sequence through pipeline stages.</p>
+                <p class="related">Related: <a href="#scheduler">Scheduler</a>, <a href="#pipeline">Pipeline</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-g">
+            <h2>G</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="global-memory">Global Memory</h3>
+                <p>The main memory accessible by all cores and threads. In Tiny-GPU, global memory is accessed through the memory controller via load/store operations. Data memory holds kernel inputs and outputs.</p>
+                <p class="related">Related: <a href="#lsu">LSU</a>, <a href="#controller">Controller</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="gds">GDS (Graphic Database System)</h3>
+                <p>A binary file format used to represent integrated circuit layouts. The <code>gds/</code> directory contains physical layout snapshots of the Tiny-GPU design.</p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="gpu">GPU (Graphics Processing Unit)</h3>
+                <p>A specialized processor designed for highly parallel computation. Originally for graphics rendering, GPUs are now used for general-purpose parallel computing. Tiny-GPU implements a minimal but complete GPU architecture.</p>
+                <p class="related">Related: <a href="#simt">SIMT</a>, <a href="#core">Core</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-h">
+            <h2>H</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="handshake">Handshake</h3>
+                <p>A communication protocol where sender and receiver exchange acknowledgment signals to coordinate data transfer. The memory controller uses valid/ready handshaking for reliable memory operations.</p>
+                <p class="related">Related: <a href="#controller">Controller</a>, <a href="#memory-channel">Memory Channel</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-i">
+            <h2>I</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="immediate">Immediate Value</h3>
+                <p>A constant value encoded directly within an instruction. Tiny-GPU supports immediate operands for operations like loading constants or computing addresses. The I-type instruction format includes an immediate field.</p>
+                <p class="related">Related: <a href="#isa">ISA</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="instruction">Instruction</h3>
+                <p>A single operation that the processor can execute. Tiny-GPU instructions are 16 bits wide and specify an operation plus operands (registers and/or immediates).</p>
+                <p class="related">Related: <a href="#isa">ISA</a>, <a href="#opcode">Opcode</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="isa">ISA (Instruction Set Architecture)</h3>
+                <p>The specification of a processor's instruction formats, operations, and behavior. Tiny-GPU defines an 11-instruction ISA including arithmetic, memory, and control flow operations.</p>
+                <p class="related">Related: <a href="#instruction">Instruction</a>, <a href="#opcode">Opcode</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-k">
+            <h2>K</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="kernel">Kernel</h3>
+                <p>A program written to execute on the GPU. Kernels are launched with a specified number of thread blocks, with each thread executing the same code on different data (SIMT model).</p>
+                <p class="related">Related: <a href="#simt">SIMT</a>, <a href="#block">Block</a>, <a href="#dcr">DCR</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-l">
+            <h2>L</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="lockstep">Lockstep Execution</h3>
+                <p>A mode where multiple execution units execute the same instruction simultaneously. In Tiny-GPU, threads within a block operate in lockstep—they all execute the same instruction at each step.</p>
+                <p class="related">Related: <a href="#simt">SIMT</a>, <a href="#thread">Thread</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="lsu">LSU (Load/Store Unit)</h3>
+                <p>The hardware component that handles memory access operations. Each thread has its own LSU that generates memory addresses and interfaces with the memory controller for load and store operations. See <code>src/lsu.sv</code>.</p>
+                <p class="related">Related: <a href="#global-memory">Global Memory</a>, <a href="#controller">Controller</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-m">
+            <h2>M</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="memory-channel">Memory Channel</h3>
+                <p>A communication pathway between cores and the memory controller. Channels carry request/response signals including address, data, and handshake signals. Tiny-GPU uses channelized access for parallel memory operations.</p>
+                <p class="related">Related: <a href="#controller">Controller</a>, <a href="#handshake">Handshake</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-n">
+            <h2>N</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="nzp">NZP Flags (Negative, Zero, Positive)</h3>
+                <p>Condition code flags set by comparison and arithmetic operations. The BRnzp instruction uses these flags to determine whether to take a branch. Each flag indicates the sign of the most recent result.</p>
+                <p class="related">Related: <a href="#brn-instruction">BRnzp</a>, <a href="#pc">Program Counter</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-o">
+            <h2>O</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="opcode">Opcode</h3>
+                <p>The portion of an instruction that specifies which operation to perform. Tiny-GPU uses a 4-bit opcode field supporting 11 distinct operations (with room for expansion).</p>
+                <p class="related">Related: <a href="#instruction">Instruction</a>, <a href="#decoder">Decoder</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-p">
+            <h2>P</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="pc">PC (Program Counter)</h3>
+                <p>A register that holds the address of the current (or next) instruction to execute. Each thread has its own PC to track its position in the program. Branch instructions modify the PC to change control flow. See <code>src/pc.sv</code>.</p>
+                <p class="related">Related: <a href="#brn-instruction">BRnzp</a>, <a href="#fetch-stage">Fetch Stage</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="pipeline">Pipeline</h3>
+                <p>A technique for increasing throughput by overlapping the execution of multiple instructions. Tiny-GPU uses a simple pipeline with stages: FETCH → DECODE → REQUEST → WAIT → EXECUTE → UPDATE.</p>
+                <p class="related">Related: <a href="#scheduler">Scheduler</a>, <a href="#fetch-stage">Fetch Stage</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-r">
+            <h2>R</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="register">Register</h3>
+                <p>A small, fast storage location within the processor. Tiny-GPU provides 16 registers per thread (R0–R15): R0–R12 are general-purpose writable registers, and R13–R15 are read-only special registers.</p>
+                <p class="related">Related: <a href="#register-file">Register File</a>, <a href="#special-registers">Special Registers</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="register-file">Register File</h3>
+                <p>The collection of registers accessible to a thread, implemented as a multi-port memory structure. Each thread in Tiny-GPU has its own register file instance. See <code>src/registers.sv</code>.</p>
+                <p class="related">Related: <a href="#register">Register</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="rtl">RTL (Register Transfer Level)</h3>
+                <p>A design abstraction for digital circuits that describes data flow between registers and the operations performed on that data. Tiny-GPU is implemented in RTL using SystemVerilog.</p>
+                <p class="related">Related: <a href="#systemverilog">SystemVerilog</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-s">
+            <h2>S</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="scheduler">Scheduler</h3>
+                <p>The control unit that sequences pipeline stages and coordinates thread execution within a core. Implements the core FSM that cycles through FETCH, DECODE, REQUEST, WAIT, EXECUTE, and UPDATE stages. See <code>src/scheduler.sv</code>.</p>
+                <p class="related">Related: <a href="#pipeline">Pipeline</a>, <a href="#fsm">FSM</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="simt">SIMT (Single Instruction, Multiple Threads)</h3>
+                <p>An execution model where multiple threads execute the same instruction simultaneously but on different data. This is the fundamental programming model of GPUs, enabling massive parallelism. Tiny-GPU implements SIMT at the block level.</p>
+                <p class="related">Related: <a href="#thread">Thread</a>, <a href="#lockstep">Lockstep</a>, <a href="#kernel">Kernel</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="special-registers">Special Registers</h3>
+                <p>Read-only registers that provide execution context: R13 (<code>blockIdx</code>), R14 (<code>blockDim</code>), and R15 (<code>threadIdx</code>). These cannot be modified by instructions and are set by hardware when a thread block is launched.</p>
+                <p class="related">Related: <a href="#blockidx">blockIdx</a>, <a href="#blockdim">blockDim</a>, <a href="#threadidx">threadIdx</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="systemverilog">SystemVerilog</h3>
+                <p>A hardware description and verification language that extends Verilog. Tiny-GPU is written in SystemVerilog and uses <code>sv2v</code> for conversion to Verilog-2005 for synthesis tools.</p>
+                <p class="related">Related: <a href="#rtl">RTL</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-t">
+            <h2>T</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="thread">Thread</h3>
+                <p>The smallest unit of execution in a GPU. Each thread has its own program counter, register file, and execution state. Threads execute the kernel code independently while following SIMT execution semantics.</p>
+                <p class="related">Related: <a href="#simt">SIMT</a>, <a href="#block">Block</a>, <a href="#threadidx">threadIdx</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="threadidx">threadIdx</h3>
+                <p>A read-only register (R15) that holds the thread's index within its block. Combined with <code>blockIdx</code> and <code>blockDim</code>, this enables computation of a globally unique thread identifier.</p>
+                <p class="related">Related: <a href="#thread">Thread</a>, <a href="#special-registers">Special Registers</a></p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="threads-per-block">THREADS_PER_BLOCK</h3>
+                <p>A compile-time parameter that sets the number of threads in each block. This determines resource replication within each core (number of ALUs, LSUs, register files, etc.).</p>
+                <p class="related">Related: <a href="#block">Block</a>, <a href="#blockdim">blockDim</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-u">
+            <h2>U</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="update-stage">Update Stage</h3>
+                <p>The final pipeline stage where results are written back to registers or memory, and the program counter is updated to point to the next instruction.</p>
+                <p class="related">Related: <a href="#pipeline">Pipeline</a>, <a href="#register-file">Register File</a></p>
+            </div>
+        </section>
+
+        <section id="glossary-w">
+            <h2>W</h2>
+            
+            <div class="glossary-entry">
+                <h3 id="waveform">Waveform</h3>
+                <p>A graphical representation of signal values over time, used for debugging and verification of digital designs. Simulation tools generate waveforms that can be viewed in waveform viewers.</p>
+            </div>
+
+            <div class="glossary-entry">
+                <h3 id="writeback">Writeback</h3>
+                <p>The process of storing computation results back to the register file. In Tiny-GPU, writeback occurs during the UPDATE stage for most instructions.</p>
+                <p class="related">Related: <a href="#update-stage">Update Stage</a>, <a href="#register-file">Register File</a></p>
+            </div>
+        </section>
+
+        <section id="quick-reference">
+            <h2>Quick Reference Diagram</h2>
+            <p>The following diagram shows how key concepts relate to each other:</p>
+            
+            <div class="mermaid">
+flowchart TB
+    subgraph GPU["GPU (gpu.sv)"]
+        DCR[DCR<br/>Configuration]
+        DISPATCH[Dispatcher<br/>Block Assignment]
+        CTRL_D[Data Controller]
+        CTRL_P[Program Controller]
+        
+        subgraph CORE1["Core 0"]
+            SCHED1[Scheduler/FSM]
+            FETCH1[Fetcher]
+            DEC1[Decoder]
+            subgraph THREADS1["Threads"]
+                T0_1[Thread 0]
+                T1_1[Thread 1]
+                TN_1[Thread N]
+            end
+        end
+        
+        subgraph CORE2["Core 1..N"]
+            SCHED2[Scheduler/FSM]
+            FETCH2[Fetcher]
+            DEC2[Decoder]
+            THREADS2[Threads...]
+        end
+    end
+    
+    MEM_P[(Program<br/>Memory)]
+    MEM_D[(Data<br/>Memory)]
+    
+    DCR --> DISPATCH
+    DISPATCH --> CORE1
+    DISPATCH --> CORE2
+    CTRL_P <--> MEM_P
+    CTRL_D <--> MEM_D
+    CORE1 <--> CTRL_P
+    CORE1 <--> CTRL_D
+    CORE2 <--> CTRL_P
+    CORE2 <--> CTRL_D
+            </div>
+        </section>
+    </main>
+
+    <nav class="chapter-nav bottom-nav">
+        <a href="../table-of-contents.html" class="nav-link">← Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-b-instruction-reference.html" class="nav-link">Next: Appendix B →</a>
+    </nav>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'neutral',
+            flowchart: { 
+                useMaxWidth: true, 
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

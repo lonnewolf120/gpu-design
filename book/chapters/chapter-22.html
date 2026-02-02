@@ -1,40 +1,326 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 22: Physical Design and Floorplanning | Create Your Own GPU</title>
+    <title>Chapter 22: Physical Design Flow | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .file-header { background: #2d2d2d; color: #9cdcfe; padding: 8px 16px; border-radius: 8px 8px 0 0; font-size: 12px; font-family: monospace; margin-bottom: -20px; }
+        .layout-box { background: #f5f5f5; border: 2px solid #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
+        .metal-layer { height: 30px; margin: 4px 0; border-radius: 4px; text-align: center; line-height: 30px; color: white; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-21.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-21.html">← Previous: Logic Synthesis</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-23.html">Next →</a>
+            <a href="chapter-23.html">Next: Design Signoff →</a>
         </div>
 
-        <h1>Chapter 22: Physical Design and Floorplanning</h1>
-        <div style="color: #999; margin: 20px 0;">V: Physical Design & Manufacturing • Reading time: ~60 min</div>
-        
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Physical Design and Floorplanning</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <h1>Chapter 22: Physical Design Flow</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part VI: Chip Fabrication</span>
+            <span>Reading time: ~60 minutes</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-21.html">← Previous</a>
+        <h2>Introduction</h2>
+        <p>Physical design transforms a gate-level netlist into a geometric layout that can be manufactured. This is where logic gates become metal shapes on silicon. The tiny-gpu project includes GDS files showing what the final layout looks like.</p>
+
+        <h2>22.1 The Physical Design Flow</h2>
+
+        <div class="mermaid">
+graph TB
+    NET["Gate-Level Netlist"] --> FP["Floorplanning"]
+    FP --> PDN["Power Planning"]
+    PDN --> PLACE["Placement"]
+    PLACE --> CTS["Clock Tree Synthesis"]
+    CTS --> ROUTE["Routing"]
+    ROUTE --> OPT["Optimization"]
+    OPT --> GDS["GDSII Output"]
+    
+    style NET fill:#e3f2fd
+    style FP fill:#fff3e0
+    style PLACE fill:#fff3e0
+    style CTS fill:#e8f5e9
+    style ROUTE fill:#e8f5e9
+    style GDS fill:#f3e5f5
+        </div>
+
+        <h2>22.2 Floorplanning</h2>
+
+        <p>Floorplanning defines the chip boundaries and organizes major blocks:</p>
+
+        <div class="layout-box">
+            <div style="border: 3px solid #2196f3; padding: 10px; margin: 10px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div style="background: #e3f2fd; padding: 20px; border-radius: 4px;">Core 0</div>
+                    <div style="background: #e3f2fd; padding: 20px; border-radius: 4px;">Core 1</div>
+                    <div style="background: #fff3e0; padding: 20px; border-radius: 4px;">Memory Controller</div>
+                    <div style="background: #e8f5e9; padding: 20px; border-radius: 4px;">Dispatcher</div>
+                </div>
+                <div style="margin-top: 10px; color: #666; font-size: 12px;">I/O Ring</div>
+            </div>
+        </div>
+
+        <h3>22.2.1 Floorplan Considerations</h3>
+
+        <table>
+            <thead>
+                <tr><th>Factor</th><th>Impact</th><th>Strategy</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Die Size</td><td>Cost, yield</td><td>Minimize while meeting timing</td></tr>
+                <tr><td>Aspect Ratio</td><td>Routing, power</td><td>Close to 1:1 is ideal</td></tr>
+                <tr><td>Block Placement</td><td>Wirelength</td><td>Place connected blocks near each other</td></tr>
+                <tr><td>I/O Placement</td><td>Pin access</td><td>Match package requirements</td></tr>
+            </tbody>
+        </table>
+
+        <h2>22.3 Power Distribution Network</h2>
+
+        <p>The PDN delivers VDD and VSS to all cells:</p>
+
+        <div class="mermaid">
+graph TB
+    PAD["Power Pads<br/>(I/O Ring)"] --> RING["Power Ring<br/>(Chip Perimeter)"]
+    RING --> STRAP["Power Straps<br/>(Horizontal/Vertical)"]
+    STRAP --> RAIL["Standard Cell Rails<br/>(VDD/VSS rows)"]
+    
+    style PAD fill:#f44336,color:white
+    style RING fill:#ff9800,color:white
+    style STRAP fill:#ffc107
+    style RAIL fill:#ffeb3b
+        </div>
+
+        <h3>22.3.1 Metal Stack</h3>
+
+        <div class="layout-box">
+            <div class="metal-layer" style="background: #9c27b0;">Metal 5 (Power Straps)</div>
+            <div class="metal-layer" style="background: #673ab7;">Metal 4 (Horizontal Routes)</div>
+            <div class="metal-layer" style="background: #3f51b5;">Metal 3 (Vertical Routes)</div>
+            <div class="metal-layer" style="background: #2196f3;">Metal 2 (Horizontal Routes)</div>
+            <div class="metal-layer" style="background: #03a9f4;">Metal 1 (Cell Internal + Local)</div>
+            <div class="metal-layer" style="background: #607d8b;">Poly (Transistor Gates)</div>
+            <div class="metal-layer" style="background: #795548;">Diffusion (Transistors)</div>
+        </div>
+
+        <h2>22.4 Placement</h2>
+
+        <p>Placement positions standard cells to minimize wirelength and meet timing:</p>
+
+        <h3>22.4.1 Placement Stages</h3>
+
+        <ol>
+            <li><strong>Global Placement:</strong> Rough positioning to spread cells evenly</li>
+            <li><strong>Legalization:</strong> Snap cells to legal row positions</li>
+            <li><strong>Detailed Placement:</strong> Fine-tune for timing and congestion</li>
+        </ol>
+
+        <div class="code-block">
+<code><span class="comment"># OpenLane placement configuration</span>
+set ::env(PL_TARGET_DENSITY) 0.55      <span class="comment"># 55% cell utilization</span>
+set ::env(PL_TIME_DRIVEN) 1            <span class="comment"># Timing-aware placement</span>
+set ::env(PL_ROUTABILITY_DRIVEN) 1     <span class="comment"># Congestion-aware</span>
+</code>
+        </div>
+
+        <h2>22.5 Clock Tree Synthesis (CTS)</h2>
+
+        <p>CTS builds a balanced tree to distribute the clock with minimal skew:</p>
+
+        <div class="mermaid">
+graph TB
+    CLK["Clock Pin"] --> B1["Buffer"]
+    B1 --> B2["Buffer"]
+    B1 --> B3["Buffer"]
+    B2 --> FF1["FF"]
+    B2 --> FF2["FF"]
+    B3 --> FF3["FF"]
+    B3 --> FF4["FF"]
+    
+    style CLK fill:#4caf50,color:white
+    style B1 fill:#2196f3,color:white
+    style B2 fill:#2196f3,color:white
+    style B3 fill:#2196f3,color:white
+        </div>
+
+        <h3>22.5.1 Clock Metrics</h3>
+
+        <table>
+            <thead>
+                <tr><th>Metric</th><th>Definition</th><th>Target</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Clock Skew</td><td>Max difference in clock arrival times</td><td>&lt; 5% of period</td></tr>
+                <tr><td>Insertion Delay</td><td>Time from source to farthest sink</td><td>Minimize</td></tr>
+                <tr><td>Clock Transition</td><td>Rise/fall time at sinks</td><td>&lt; 10% of period</td></tr>
+            </tbody>
+        </table>
+
+        <h2>22.6 Routing</h2>
+
+        <p>Routing connects placed cells with metal wires:</p>
+
+        <h3>22.6.1 Routing Stages</h3>
+
+        <ol>
+            <li><strong>Global Routing:</strong> Plan routes through grid cells</li>
+            <li><strong>Track Assignment:</strong> Assign wires to specific tracks</li>
+            <li><strong>Detailed Routing:</strong> Create actual metal shapes</li>
+        </ol>
+
+        <h3>22.6.2 Design Rule Checks</h3>
+
+        <table>
+            <thead>
+                <tr><th>Rule</th><th>Description</th><th>Violation Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Min Width</td><td>Minimum wire width</td><td>Wire too thin</td></tr>
+                <tr><td>Min Spacing</td><td>Minimum gap between wires</td><td>Wires too close</td></tr>
+                <tr><td>Min Area</td><td>Minimum metal area</td><td>Small floating metal</td></tr>
+                <tr><td>Via Enclosure</td><td>Metal overlap on vias</td><td>Via not fully covered</td></tr>
+            </tbody>
+        </table>
+
+        <h2>22.7 OpenLane Flow</h2>
+
+        <p>OpenLane is an automated RTL-to-GDSII flow:</p>
+
+        <div class="code-block">
+<code><span class="comment"># Run OpenLane on tiny-gpu</span>
+cd openlane
+./flow.tcl -design gpu -tag run1
+
+<span class="comment"># Key outputs:</span>
+<span class="comment"># designs/gpu/runs/run1/results/final/gds/gpu.gds</span>
+<span class="comment"># designs/gpu/runs/run1/results/final/lef/gpu.lef</span>
+<span class="comment"># designs/gpu/runs/run1/reports/</span>
+</code>
+        </div>
+
+        <h3>22.7.1 OpenLane Tools</h3>
+
+        <table>
+            <thead>
+                <tr><th>Stage</th><th>Tool</th><th>Output</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Synthesis</td><td>Yosys + ABC</td><td>gate-level netlist</td></tr>
+                <tr><td>Floorplan</td><td>OpenROAD</td><td>DEF with die area</td></tr>
+                <tr><td>Placement</td><td>OpenROAD</td><td>placed DEF</td></tr>
+                <tr><td>CTS</td><td>TritonCTS</td><td>clock tree</td></tr>
+                <tr><td>Routing</td><td>TritonRoute</td><td>routed DEF</td></tr>
+                <tr><td>GDSII</td><td>Magic</td><td>gpu.gds</td></tr>
+            </tbody>
+        </table>
+
+        <h2>22.8 The GDS Files</h2>
+
+        <p>tiny-gpu includes two GDS snapshots in the <code>gds/</code> directory:</p>
+
+        <div class="info-box">
+            <strong>gds/0/gpu.gds:</strong> Initial run with default parameters
+            <br>
+            <strong>gds/1/gpu.gds:</strong> Optimized run with tuned settings
+        </div>
+
+        <p>View these files with KLayout or Magic:</p>
+
+        <div class="code-block">
+<code><span class="comment"># Open with KLayout</span>
+klayout gds/1/gpu.gds
+
+<span class="comment"># Open with Magic</span>
+magic -T sky130A gds/1/gpu.gds
+</code>
+        </div>
+
+        <h2>22.9 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 22.1: Calculate Utilization</h4>
+            <p>If a design has 8934 cells, each averaging 5 μm², and the die area is 100,000 μm², what is the cell utilization?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Total cell area = 8934 × 5 = 44,670 μm²</p>
+                    <p>Utilization = 44,670 / 100,000 = 44.67%</p>
+                    <p>This is reasonable. Higher utilization makes routing harder.</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 22.2: Clock Skew Impact</h4>
+            <p>With a 10ns clock period and 500ps skew, how much does skew reduce the effective timing margin?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Skew = 500ps = 0.5ns</p>
+                    <p>Effective period = 10ns - 0.5ns = 9.5ns</p>
+                    <p>5% timing margin lost to skew</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>22.10 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🏗️ Physical design = geometry problem:</strong> Place cells, build clock tree, route wires, all while meeting timing.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ Power network is critical:</strong> Every cell needs clean power. IR drop causes timing failures.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🕐 Clock tree determines performance:</strong> Balanced skew enables higher frequencies.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🛠️ OpenLane automates the flow:</strong> From RTL to GDSII with open-source tools.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-21.html">← Previous: Logic Synthesis</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-23.html">Next →</a>
+            <a href="chapter-23.html">Next: Design Signoff →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

@@ -1,40 +1,333 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 25: Post-Silicon Bring-Up and Characterization | Create Your Own GPU</title>
+    <title>Chapter 25: The Future of GPU Design | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .future-box { background: linear-gradient(135deg, #f3e5f5 0%, #e8f5e9 100%); border: 1px solid #9c27b0; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .trend-card { background: white; border-radius: 12px; padding: 20px; margin: 16px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #667eea; }
+        .trend-card h4 { margin-top: 0; color: #667eea; }
+        .conclusion-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin: 30px 0; }
+        .conclusion-box h2 { color: white; border-bottom-color: rgba(255,255,255,0.3); }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-24.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-24.html">← Previous: Tape-Out and Manufacturing</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-26.html">Next →</a>
+            <a href="../index.html">Back to Home →</a>
         </div>
 
-        <h1>Chapter 25: Post-Silicon Bring-Up and Characterization</h1>
-        <div style="color: #999; margin: 20px 0;">V: Physical Design & Manufacturing • Reading time: ~60 min</div>
-        
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Post-Silicon Bring-Up and Characterization</strong>.</p>
-            <p>Topics to be covered:
+        <h1>Chapter 25: The Future of GPU Design</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part VII: Beyond tiny-gpu</span>
+            <span>Reading time: ~45 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>We've journeyed from GPU fundamentals to silicon manufacturing. Now let's look ahead. What trends will shape GPU architecture in the coming decade? How can you continue learning? And what comes after tiny-gpu?</p>
+
+        <h2>25.1 Architectural Trends</h2>
+
+        <div class="trend-card">
+            <h4>🧩 Chiplets and Disaggregation</h4>
+            <p>Modern GPUs are moving from monolithic dies to chiplet-based designs:</p>
             <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
+                <li>AMD MI300X: Multiple GPU dies + HBM stacks</li>
+                <li>Intel Ponte Vecchio: 47 chiplets, 5 process nodes</li>
+                <li>NVIDIA GB200: Compute + memory + I/O dies</li>
             </ul>
-            </p>
+            <p><strong>Why:</strong> Better yields, mix-and-match process nodes, modular scaling.</p>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-24.html">← Previous</a>
+        <div class="trend-card">
+            <h4>⚡ Near-Memory Computing</h4>
+            <p>Moving compute closer to data to reduce memory bandwidth bottlenecks:</p>
+            <ul>
+                <li>Processing-in-Memory (PIM) for AI inference</li>
+                <li>HBM with integrated compute logic</li>
+                <li>3D-stacked compute + memory</li>
+            </ul>
+        </div>
+
+        <div class="trend-card">
+            <h4>🤖 AI-Specific Accelerators</h4>
+            <p>Tensor cores, matrix engines, and transformer accelerators:</p>
+            <ul>
+                <li>FP8/INT8 tensor operations for training</li>
+                <li>Sparsity support (2:4 structured sparsity)</li>
+                <li>Transformer-optimized attention engines</li>
+            </ul>
+        </div>
+
+        <div class="trend-card">
+            <h4>🔋 Power Efficiency Focus</h4>
+            <p>Data centers consume megawatts; efficiency is critical:</p>
+            <ul>
+                <li>Dynamic voltage/frequency scaling</li>
+                <li>Power gating unused units</li>
+                <li>Liquid cooling for 700W+ TDPs</li>
+            </ul>
+        </div>
+
+        <h2>25.2 Emerging Technologies</h2>
+
+        <h3>25.2.1 Advanced Packaging</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "2.5D Packaging"
+        GPU1["GPU Die"] --- INT["Silicon Interposer"]
+        HBM1["HBM Stack"] --- INT
+        INT --- SUB1["Package Substrate"]
+    end
+    
+    subgraph "3D Stacking"
+        TOP["Compute Die"] --- BOND["Hybrid Bonding"]
+        BOND --- MEM["Memory Die"]
+        MEM --- BOT["Base Die"]
+    end
+        </div>
+
+        <h3>25.2.2 New Memory Technologies</h3>
+
+        <table>
+            <thead>
+                <tr><th>Technology</th><th>Bandwidth</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>HBM3e</td><td>1.2 TB/s/stack</td><td>Production (2024)</td></tr>
+                <tr><td>HBM4</td><td>2+ TB/s/stack</td><td>Development</td></tr>
+                <tr><td>CXL Memory</td><td>Pooled/shared</td><td>Emerging</td></tr>
+                <tr><td>Compute Express Link</td><td>Cache-coherent</td><td>Gen 3.0</td></tr>
+            </tbody>
+        </table>
+
+        <h3>25.2.3 New Transistor Architectures</h3>
+
+        <div class="mermaid">
+graph LR
+    PLANAR["Planar<br/>(pre-2012)"] --> FINFET["FinFET<br/>(2012-2022)"]
+    FINFET --> GAA["GAA<br/>(2022+)"]
+    GAA --> CFET["CFET<br/>(2027?)"]
+    
+    style PLANAR fill:#e0e0e0
+    style FINFET fill:#bbdefb
+    style GAA fill:#c8e6c9
+    style CFET fill:#f3e5f5
+        </div>
+
+        <ul>
+            <li><strong>GAA (Gate-All-Around):</strong> Samsung 3nm, Intel 20A - better channel control</li>
+            <li><strong>CFET (Complementary FET):</strong> Stack NMOS over PMOS - 2x density</li>
+            <li><strong>2D Materials:</strong> Graphene, MoS₂ - beyond silicon</li>
+        </ul>
+
+        <h2>25.3 Software-Hardware Co-Design</h2>
+
+        <p>Future GPUs will be designed with specific software workloads in mind:</p>
+
+        <div class="future-box">
+            <h4>🔮 The Co-Design Approach</h4>
+            <ol>
+                <li><strong>Profile workloads:</strong> Understand AI model characteristics</li>
+                <li><strong>Design hardware:</strong> Optimize for those patterns</li>
+                <li><strong>Build compilers:</strong> Map software to hardware efficiently</li>
+                <li><strong>Iterate:</strong> Feed hardware learnings back to software</li>
+            </ol>
+        </div>
+
+        <h2>25.4 Open-Source Hardware Movement</h2>
+
+        <p>tiny-gpu is part of a growing ecosystem:</p>
+
+        <table>
+            <thead>
+                <tr><th>Project</th><th>Description</th><th>Link</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>OpenROAD</td><td>Open-source RTL-to-GDS flow</td><td>openroad.org</td></tr>
+                <tr><td>Sky130 PDK</td><td>Open 130nm process</td><td>skywater-pdk.readthedocs.io</td></tr>
+                <tr><td>OpenLane</td><td>Automated ASIC flow</td><td>github.com/efabless/openlane</td></tr>
+                <tr><td>RISC-V</td><td>Open ISA</td><td>riscv.org</td></tr>
+                <tr><td>Chipyard</td><td>SoC design framework</td><td>chipyard.readthedocs.io</td></tr>
+                <tr><td>VeriGPU</td><td>Another open GPU</td><td>github.com/hughperkins/VeriGPU</td></tr>
+            </tbody>
+        </table>
+
+        <h2>25.5 Extending tiny-gpu</h2>
+
+        <p>Where could you take tiny-gpu next?</p>
+
+        <div class="trend-card">
+            <h4>🚀 Performance Enhancements</h4>
+            <ul>
+                <li>Add pipelining to overlap instruction stages</li>
+                <li>Implement instruction cache</li>
+                <li>Add data cache with coalescing</li>
+                <li>Support wider SIMD (16/32 threads)</li>
+            </ul>
+        </div>
+
+        <div class="trend-card">
+            <h4>📐 Architectural Features</h4>
+            <ul>
+                <li>Add shared memory per block</li>
+                <li>Implement warp scheduling</li>
+                <li>Support branch divergence with SIMT stack</li>
+                <li>Add texture sampling unit</li>
+            </ul>
+        </div>
+
+        <div class="trend-card">
+            <h4>🛠️ Tooling and Testing</h4>
+            <ul>
+                <li>Build an assembler for the ISA</li>
+                <li>Create a simple compiler from C-like language</li>
+                <li>Add performance counters</li>
+                <li>Implement JTAG debug interface</li>
+            </ul>
+        </div>
+
+        <div class="trend-card">
+            <h4>🎯 AI Acceleration</h4>
+            <ul>
+                <li>Add INT8 multiply-accumulate</li>
+                <li>Implement matrix multiply unit</li>
+                <li>Support FP16 for inference</li>
+                <li>Add activation functions in hardware</li>
+            </ul>
+        </div>
+
+        <h2>25.6 Learning Resources</h2>
+
+        <h3>25.6.1 Books</h3>
+
+        <ul>
+            <li><em>Computer Architecture: A Quantitative Approach</em> - Hennessy & Patterson</li>
+            <li><em>Digital Design and Computer Architecture</em> - Harris & Harris</li>
+            <li><em>CMOS VLSI Design</em> - Weste & Harris</li>
+            <li><em>Programming Massively Parallel Processors</em> - Kirk & Hwu</li>
+        </ul>
+
+        <h3>25.6.2 Online Courses</h3>
+
+        <ul>
+            <li>MIT 6.004 Computation Structures (OpenCourseWare)</li>
+            <li>Stanford CS149 Parallel Computing</li>
+            <li>Berkeley CS152 Computer Architecture</li>
+            <li>Efabless Open-Source ASIC Workshop</li>
+        </ul>
+
+        <h3>25.6.3 Communities</h3>
+
+        <ul>
+            <li>Open Source Silicon Foundation (FOSSi)</li>
+            <li>r/chipdesign and r/FPGA subreddits</li>
+            <li>Skywater-PDK Slack</li>
+            <li>RISC-V Foundation events</li>
+        </ul>
+
+        <h2>25.7 Career Paths</h2>
+
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Focus</th><th>Skills from This Book</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>RTL Designer</td><td>Writing hardware</td><td>SystemVerilog, FSMs, pipelining</td></tr>
+                <tr><td>Verification Engineer</td><td>Testing correctness</td><td>cocotb, assertions, coverage</td></tr>
+                <tr><td>Physical Design Engineer</td><td>Layout optimization</td><td>Timing, power, floorplanning</td></tr>
+                <tr><td>GPU Architect</td><td>Define microarchitecture</td><td>ISA, memory hierarchy, parallelism</td></tr>
+                <tr><td>Compiler Engineer</td><td>Software→Hardware mapping</td><td>Code generation, optimization</td></tr>
+            </tbody>
+        </table>
+
+        <h2>25.8 Final Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 25.1: Design a Feature</h4>
+            <p>Choose one feature from Section 25.5 and write a design document describing:</p>
+            <ul>
+                <li>What modules would need to change?</li>
+                <li>What new signals/interfaces are needed?</li>
+                <li>How would you test it?</li>
+            </ul>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 25.2: Predict the Future</h4>
+            <p>Based on trends in this chapter, predict what a "tiny-gpu v2" for 2030 would look like. Consider:</p>
+            <ul>
+                <li>What new instructions would it need?</li>
+                <li>What memory architecture?</li>
+                <li>How many cores/threads?</li>
+            </ul>
+        </div>
+
+        <div class="conclusion-box">
+            <h2>Conclusion</h2>
+            <p>You've completed an incredible journey through GPU architecture—from the first transistor concepts to tape-out and beyond. tiny-gpu started as a learning project, but the principles you've learned apply to billion-dollar designs at NVIDIA, AMD, and Intel.</p>
+            
+            <p><strong>Remember:</strong></p>
+            <ul>
+                <li>Every modern GPU started as an idea</li>
+                <li>Open-source tools make chip design accessible</li>
+                <li>The best way to learn is to build</li>
+            </ul>
+            
+            <p style="font-size: 1.2em; margin-top: 24px;"><strong>Now go build something amazing.</strong> 🚀</p>
+        </div>
+
+        <h2>25.9 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🔮 GPUs are evolving rapidly:</strong> Chiplets, AI acceleration, and new memory technologies are reshaping architecture.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🌍 Open-source is democratizing chip design:</strong> Tools like OpenLane and Sky130 make real silicon accessible to individuals.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📚 Keep learning:</strong> GPU architecture is a deep field with decades of research and innovation ahead.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🛠️ Build to understand:</strong> tiny-gpu is a foundation—extend it, break it, learn from it.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-24.html">← Previous: Tape-Out and Manufacturing</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-26.html">Next →</a>
+            <a href="../index.html">Back to Home →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

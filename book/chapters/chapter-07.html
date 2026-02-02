@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 7: Memory Hierarchy | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <style>
-        .chapter-content { max-width: 850px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
         .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
         .figure { margin: 30px 0; padding: 20px; background: #f9f9ff; border-radius: 12px; overflow-x: auto; }
         .figure-caption { font-style: italic; color: var(--muted); margin: 10px 0 0 0; text-align: center; }
@@ -17,10 +18,15 @@
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         th { background: #f5f5f5; font-weight: bold; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; }
         pre { font-size: 12px; line-height: 1.4; }
     </style>
 </head>
 <body>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: { primaryColor: '#e3f2fd', primaryTextColor: '#1565c0', primaryBorderColor: '#90caf9', lineColor: '#64b5f6', secondaryColor: '#f3e5f5', tertiaryColor: '#fff3e0' } });
+    </script>
+
     <div class="chapter-content">
         <div class="chapter-nav">
             <a href="chapter-06.html">← Previous: Pipeline Design</a>
@@ -52,41 +58,25 @@
             <li>200-400 cycles if in main DRAM</li>
         </ul>
 
-        <p>
-            The memory hierarchy uses a <strong>cache pyramid</strong> to bridge this 100-400× latency gap. 
-            In this chapter, we'll explore caches, bandwidth, and memory access patterns.
-        </p>
-
         <h2>7.1 The Memory Pyramid</h2>
 
-        <div class="figure">
-            <pre>Memory Hierarchy (Capacity vs Speed Tradeoff):
-┌──────────────────────────┐
-│   Registers (64 KB)      │ ← 1 cycle, ultra-fast
-│   Per-thread locals      │    64 registers × 2048 threads
-└──────────────────────────┘
-            ▲
-            │
-┌──────────────────────────┐
-│  L1 Cache (128 KB)       │ ← 20-40 cycles, fast
-│  Per-SM, per-thread data │
-└──────────────────────────┘
-            ▲
-            │
-┌──────────────────────────┐
-│  L2 Cache (12-16 MB)     │ ← 100-200 cycles, slower
-│  Shared across all SMs   │
-└──────────────────────────┘
-            ▲
-            │
-┌──────────────────────────┐
-│ Main DRAM (8-48 GB)      │ ← 200-400 cycles, slow
-│ Entire GPU's memory      │
-└──────────────────────────┘
-
-Key insight: Bigger = Slower (exponential tradeoff)</pre>
-            <div class="figure-caption">Figure 7.1: Memory hierarchy pyramid</div>
+        <div class="mermaid">
+            flowchart TB
+                subgraph Pyramid["MEMORY HIERARCHY PYRAMID"]
+                    REG["🔴 Registers (256 KB/SM)<br/>1 cycle latency<br/>32 KB/cycle bandwidth<br/>Per-thread"]
+                    L1["🟠 L1 Cache (128 KB/SM)<br/>20-40 cycles<br/>128 B/cycle<br/>Per-SM"]
+                    L2["🟡 L2 Cache (12-40 MB)<br/>100-200 cycles<br/>256 B/cycle<br/>All SMs shared"]
+                    DRAM["🟢 HBM/DRAM (8-80 GB)<br/>200-400 cycles<br/>250-900 GB/s<br/>All SMs shared"]
+                    
+                    REG --> L1 --> L2 --> DRAM
+                end
+                
+                style REG fill:#ffcdd2
+                style L1 fill:#ffe0b2
+                style L2 fill:#fff9c4
+                style DRAM fill:#c8e6c9
         </div>
+        <div class="figure-caption">Figure 7.1: Memory hierarchy pyramid — Bigger = Slower (exponential tradeoff)</div>
 
         <h3>Capacity and Bandwidth Overview</h3>
 
@@ -101,34 +91,10 @@ Key insight: Bigger = Slower (exponential tradeoff)</pre>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>Registers</td>
-                    <td>256 KB (per SM)</td>
-                    <td>0-1 cy</td>
-                    <td>32 KB/cy</td>
-                    <td>Per-thread</td>
-                </tr>
-                <tr>
-                    <td>L1 Cache</td>
-                    <td>128 KB (per SM)</td>
-                    <td>20-40 cy</td>
-                    <td>128 B/cy</td>
-                    <td>Per-SM</td>
-                </tr>
-                <tr>
-                    <td>L2 Cache</td>
-                    <td>12-40 MB</td>
-                    <td>100-200 cy</td>
-                    <td>256 B/cy</td>
-                    <td>All SMs</td>
-                </tr>
-                <tr>
-                    <td>DRAM</td>
-                    <td>8-80 GB</td>
-                    <td>200-400 cy</td>
-                    <td>250-900 GB/s</td>
-                    <td>All SMs</td>
-                </tr>
+                <tr><td>Registers</td><td>256 KB (per SM)</td><td>0-1 cy</td><td>32 KB/cy</td><td>Per-thread</td></tr>
+                <tr><td>L1 Cache</td><td>128 KB (per SM)</td><td>20-40 cy</td><td>128 B/cy</td><td>Per-SM</td></tr>
+                <tr><td>L2 Cache</td><td>12-40 MB</td><td>100-200 cy</td><td>256 B/cy</td><td>All SMs</td></tr>
+                <tr><td>DRAM</td><td>8-80 GB</td><td>200-400 cy</td><td>250-900 GB/s</td><td>All SMs</td></tr>
             </tbody>
         </table>
 
@@ -136,22 +102,14 @@ Key insight: Bigger = Slower (exponential tradeoff)</pre>
 
         <h3>Cache Parameters and Design Space</h3>
 
-        <p>
-            A cache is defined by four key parameters:
-        </p>
-
         <ul>
             <li><strong>Size:</strong> Total capacity (KB or MB). Larger = fewer misses, but slower access and more power.</li>
-            <li><strong>Line size:</strong> Minimum unit of data movement (32-128 bytes typical). Larger = better amortizes fetch cost but wastes space on streaming data.</li>
-            <li><strong>Associativity:</strong> How many places a given address can map to. Fully associative is best but expensive; direct-mapped is cheap but many conflicts.</li>
-            <li><strong>Replacement policy:</strong> Which line to evict on a miss. LRU is popular; FIFO is cheaper.</li>
+            <li><strong>Line size:</strong> Minimum unit of data movement (32-128 bytes typical).</li>
+            <li><strong>Associativity:</strong> How many places a given address can map to.</li>
+            <li><strong>Replacement policy:</strong> Which line to evict on a miss (LRU, FIFO).</li>
         </ul>
 
         <h3>L1 Cache Internals</h3>
-
-        <p>
-            Typical NVIDIA L1 cache configuration:
-        </p>
 
         <div class="code-block">
 <pre>L1 Cache Parameters:
@@ -166,44 +124,42 @@ Address to Cache Index:
   ┌────────────────────────────────────┐
   │ [31:11] Tag | [10:7] Index | [6:0] Offset │
   │  21 bits    │  4 bits     │   7 bits     │
-  └────────────────────────────────────┘
-  
-  Tag:    Identifies which block (physical address high bits)
-  Index:  Which set to search in cache
-  Offset: Which byte within a 128-byte line</pre>
+  └────────────────────────────────────┘</pre>
         </div>
 
         <h3>Cache Lookup Process</h3>
 
-        <div class="figure">
-            <pre>Example: CPU reads address 0x12345678
-
-Step 1: Extract fields
-  Tag = 0x1234 (bits 31:11)
-  Index = 0x5 (bits 10:7)
-  Offset = 0x78 (bits 6:0)
-
-Step 2: Lookup Set 5 in L1
-  ┌──────────────────────────────────────────┐
-  │ Set 5 (4-way associative)                │
-  ├──────────────────────────────────────────┤
-  │ Way 0: Valid | Tag 0xABCD | Data[...]   │
-  │ Way 1: Valid | Tag 0x1234 | Data[...] ★ │ ← MATCH!
-  │ Way 2: Valid | Tag 0x5678 | Data[...]   │
-  │ Way 3: Invalid                           │
-  └──────────────────────────────────────────┘
-
-Step 3: Return data
-  Data = Ways[1].Data[Offset 0x78]
-  Latency: ~20 cycles from CPU
-  Status: CACHE HIT
-
-If no tag matches → CACHE MISS
-  - Fetch from L2 (→ 100-200 cycles)
-  - Fill evicted line (use LRU policy)
-  - Retry load</pre>
-            <div class="figure-caption">Figure 7.2: Cache lookup walkthrough</div>
+        <div class="mermaid">
+            flowchart TB
+                subgraph Lookup["CACHE LOOKUP EXAMPLE"]
+                    ADDR["Address: 0x12345678"]
+                    EXTRACT["Extract fields:<br/>Tag=0x1234, Index=5, Offset=0x78"]
+                    SET["Look up Set 5<br/>(4-way associative)"]
+                    
+                    ADDR --> EXTRACT --> SET
+                end
+                
+                subgraph Ways["SET 5 CONTENTS"]
+                    W0["Way 0: Tag=0xABCD ❌"]
+                    W1["Way 1: Tag=0x1234 ✓ MATCH!"]
+                    W2["Way 2: Tag=0x5678 ❌"]
+                    W3["Way 3: Invalid"]
+                end
+                
+                subgraph Result["RESULT"]
+                    HIT["CACHE HIT!<br/>Return data[0x78]<br/>Latency: ~20 cycles"]
+                    MISS["If no match:<br/>CACHE MISS<br/>Fetch from L2"]
+                end
+                
+                SET --> Ways
+                W1 --> HIT
+                W0 & W2 & W3 -.-> MISS
+                
+                style HIT fill:#c8e6c9
+                style MISS fill:#ffcdd2
+                style W1 fill:#c8e6c9
         </div>
+        <div class="figure-caption">Figure 7.2: Cache lookup walkthrough</div>
 
         <h2>7.3 Cache Performance Metrics</h2>
 
@@ -217,7 +173,7 @@ If no tag matches → CACHE MISS
   Hit rate = (Total hits) / (Total accesses)
   Miss rate = 1 - Hit rate
   
-  Average Access Time (AAT):
+Average Access Time (AAT):
   AAT = Hit_rate × L1_latency + Miss_rate × L2_latency
       = 0.90 × 20 + 0.10 × 150
       = 18 + 15
@@ -228,375 +184,206 @@ Without cache:
   
 Speedup = 150 / 33 ≈ 4.5×
 
-So a 90% hit rate with cache gives 4.5× speedup over no cache!</pre>
+A 90% hit rate with cache gives 4.5× speedup over no cache!</pre>
         </div>
-
-        <h3>Cache Sizing Tradeoffs</h3>
-
-        <p>
-            Engineers must balance competing goals:
-        </p>
-
-        <ul>
-            <li><strong>Larger cache:</strong> Higher hit rates, lower miss penalty. But slower access time (more metal = more RC delay).</li>
-            <li><strong>Smaller cache:</strong> Faster access, uses less power. But higher miss rates mean more L2/DRAM stalls.</li>
-            <li><strong>Higher associativity:</strong> Fewer conflicts/evictions. But more complex comparators and slower tag lookup.</li>
-        </ul>
-
-        <p>
-            Modern GPUs choose relatively large L1 (128 KB) and very large L2 (16-40 MB) to maximize bandwidth.
-        </p>
 
         <h2>7.4 Shared Memory and Programmer Control</h2>
 
         <h3>What is Shared Memory?</h3>
 
-        <p>
-            Unlike L1 cache (automatic/transparent), GPUs provide <strong>Shared Memory</strong> or <strong>Local Data Share (LDS)</strong>:
-        </p>
-
-        <ul>
-            <li>48-96 KB per SM (AMD), 96 KB per SM (NVIDIA)</li>
-            <li>Programmer explicitly allocates and manages it</li>
-            <li>Ultra-fast (1-2 cycles latency, comparable to registers)</li>
-            <li>Shared by all threads in a block/workgroup</li>
-        </ul>
+        <div class="mermaid">
+            flowchart LR
+                subgraph Auto["AUTOMATIC: L1 CACHE"]
+                    A1["Hardware-managed"]
+                    A2["Transparent to programmer"]
+                    A3["20-40 cycles latency"]
+                end
+                
+                subgraph Manual["PROGRAMMER-CONTROLLED: SHARED MEMORY"]
+                    M1["48-96 KB per SM"]
+                    M2["Explicit allocation"]
+                    M3["1-2 cycles latency!"]
+                    M4["Shared by block threads"]
+                end
+                
+                style Manual fill:#c8e6c9
+                style Auto fill:#fff3e0
+        </div>
 
         <h3>Shared Memory Usage Pattern</h3>
 
         <div class="code-block">
 <pre>// CUDA: Matrix multiplication with shared memory tiling
 __global__ void matmul_tiled(float *A, float *B, float *C, int N) {
-    // Each SM has 96 KB shared memory
     __shared__ float tileA[32][32];  // 4 KB
     __shared__ float tileB[32][32];  // 4 KB
     
-    int bid = blockIdx.x;
     int tid = threadIdx.x;
-    int bty = blockIdx.y;
-    
-    // Each thread owns one output element
+    int bid = blockIdx.x;
     float sum = 0.0f;
     
-    // Loop over tile blocks
     for (int t = 0; t < N/32; t++) {
         // PHASE 1: Load global → shared (parallel)
-        int a_col = t * 32 + tid;
-        int a_row = bid * 32 + tid / 32;
-        if (a_col < N && a_row < N)
-            tileA[tid/32][tid%32] = A[a_row * N + a_col];
-        
-        int b_col = bid * 32 + tid;
-        int b_row = bty * 32 + tid / 32;
-        if (b_col < N && b_row < N)
-            tileB[tid/32][tid%32] = B[b_row * N + b_col];
+        tileA[tid/32][tid%32] = A[...];
+        tileB[tid/32][tid%32] = B[...];
         
         __syncthreads();  // Barrier: wait for all threads
         
-        // PHASE 2: Compute using shared (many accesses, cache-local)
+        // PHASE 2: Compute using shared (many accesses)
         for (int k = 0; k < 32; k++)
             sum += tileA[tid/32][k] * tileB[k][tid%32];
         
-        __syncthreads();  // Barrier before next tile
+        __syncthreads();
     }
     
-    // PHASE 3: Write result to global memory (coalesced)
-    int out_row = bid * 32 + tid / 32;
-    int out_col = tid % 32;
-    C[out_row * N + out_col] = sum;
+    C[...] = sum;
 }
 
 Performance impact:
-  Phase 1: 1 global load per element (coalesced) ~150 cy
-  Phase 2: 32 × 32 = 1024 shared accesses per element (~2 cy each)
-  Phase 3: 1 global store per element ~150 cy
+  Phase 1: 1 global load per element ~150 cy
+  Phase 2: 1024 shared accesses per element ~2 cy each
   
-  Total per output: 150 + 1024*2 + 150 ≈ 2474 cycles
-  Without shared memory: 32*32*2 global reads ≈ 204,800 cycles
-  Speedup: 204,800 / 2,474 ≈ 82.8×!
-  
-Why? Reuse: Each A element used 32 times, each B element used 32 times.
-Shared memory enables 32× data reuse with low-latency access.</pre>
+  Without shared memory: 32×32×2 global reads ≈ 204,800 cycles
+  With shared memory: 2474 cycles
+  Speedup: 82.8×!</pre>
         </div>
 
-        <h2>7.5 L2 Cache and Victim Cache Role</h2>
-
-        <h3>L2 Design</h3>
-
-        <p>
-            L2 cache serves as the last stop before main memory:
-        </p>
+        <h2>7.5 L2 Cache and Design</h2>
 
         <ul>
             <li>12-40 MB (shared across all SMs)</li>
-            <li>16-way or higher associativity (to reduce conflicts)</li>
-            <li>Larger line size (256-512 bytes to amortize fetch cost)</li>
+            <li>16-way or higher associativity</li>
+            <li>Larger line size (256-512 bytes)</li>
             <li>100-200 cycle latency</li>
-        </ul>
-
-        <h3>L1 vs L2 Tradeoff</h3>
-
-        <p>
-            L1 misses go to L2. L2 misses go to DRAM. The goal is:
-        </p>
-
-        <ul>
-            <li>L1: Fast, small, high hit rate on thread-local data</li>
-            <li>L2: Larger, shared, buffers between L1 and DRAM</li>
         </ul>
 
         <div class="engineer-note">
             <strong>Key Insight:</strong> If your L2 hit rate is >80%, most DRAM bandwidth 
-            is wasted (underutilized). If your L2 hit rate is <30%, you're likely 
-            DRAM-bound and need to optimize memory access patterns or increase cache size.
+            is wasted. If L2 hit rate is <30%, you're DRAM-bound — optimize access patterns.
         </div>
 
         <h2>7.6 Main Memory: DRAM and HBM</h2>
 
         <h3>High Bandwidth Memory (HBM)</h3>
 
-        <p>
-            GPUs use HBM instead of standard DRAM for much higher bandwidth:
-        </p>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Aspect</th>
-                    <th>Standard DDR (CPU)</th>
-                    <th>HBM2 (GPU)</th>
-                    <th>HBM3 (GPU)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Bandwidth</td>
-                    <td>50-100 GB/s</td>
-                    <td>250-410 GB/s</td>
-                    <td>600-900 GB/s</td>
-                </tr>
-                <tr>
-                    <td>Channels</td>
-                    <td>1-2</td>
-                    <td>8</td>
-                    <td>16</td>
-                </tr>
-                <tr>
-                    <td>Technology</td>
-                    <td>Planar</td>
-                    <td>3D stacked</td>
-                    <td>3D stacked</td>
-                </tr>
-                <tr>
-                    <td>Bus width</td>
-                    <td>64-128 bits</td>
-                    <td>1024 bits</td>
-                    <td>1024 bits</td>
-                </tr>
-                <tr>
-                    <td>Latency</td>
-                    <td>~100-150 ns</td>
-                    <td>~100-150 ns</td>
-                    <td>~100-150 ns</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <p>
-            HBM's key advantage: <strong>Wide bus</strong> (1024 bits = 128 bytes per cycle at 1 GHz).
-            Even though latency is similar, the massive bus width hides latency through parallelism.
-        </p>
+        <div class="mermaid">
+            flowchart LR
+                subgraph DDR["STANDARD DDR (CPU)"]
+                    D1["50-100 GB/s bandwidth"]
+                    D2["1-2 channels"]
+                    D3["64-128 bit bus"]
+                end
+                
+                subgraph HBM2["HBM2 (GPU)"]
+                    H1["250-410 GB/s bandwidth"]
+                    H2["8 channels"]
+                    H3["1024 bit bus!"]
+                end
+                
+                subgraph HBM3["HBM3 (Modern GPU)"]
+                    H31["600-900 GB/s bandwidth"]
+                    H32["16 channels"]
+                    H33["3D stacked memory"]
+                end
+                
+                style DDR fill:#ffcdd2
+                style HBM2 fill:#fff9c4
+                style HBM3 fill:#c8e6c9
+        </div>
+        <div class="figure-caption">Figure 7.3: HBM vs DDR memory comparison</div>
 
         <h3>Memory Controller Architecture</h3>
 
-        <div class="figure">
-            <pre>HBM8 Memory Controller Block Diagram:
-
-From L2 Cache (256-512 requests/cycle)
-         │
-         ▼
-┌─────────────────────────────────────────────┐
-│ Request Queue (FIFO, ~256 entries)          │
-│ (Address, Type: Read/Write, Size)           │
-└────────────┬────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────┐
-│ Address Translation (TLB lookup if VM)      │
-│ Virtual → Physical address                  │
-└────────────┬────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────┐
-│ Bank/Channel Scheduler                      │
-│ Distribute to 8 HBM channels                │
-│ Goal: Maximize parallelism & fairness       │
-└────────────┬────────────────────────────────┘
-             │
-        ┌────┴────┬────────┬────────┬─────────┐
-        │    │    │        │        │         │
-        ▼    ▼    ▼        ▼        ▼         ▼
-    CH0  CH1  CH2  CH3  CH4  CH5  CH6  CH7
-
-Each channel: Independent row/column addressing
-  ├─ Activate row (≈50 ns)
-  ├─ Read/write columns (≈100 ns per burst)
-  └─ Precharge & idle
-
-Total latency per channel: ~200-400 cycles (at 2 GHz)
-Aggregate bandwidth: 900 GB/s (all 8 channels parallel)</pre>
-            <div class="figure-caption">Figure 7.3: HBM8 memory controller</div>
+        <div class="mermaid">
+            flowchart TB
+                L2["From L2 Cache<br/>(256-512 requests/cycle)"]
+                RQ["Request Queue<br/>(~256 entries)"]
+                TLB["Address Translation<br/>(TLB lookup)"]
+                SCHED["Bank/Channel Scheduler<br/>Distribute to 8 channels"]
+                
+                L2 --> RQ --> TLB --> SCHED
+                
+                SCHED --> CH0["CH0"]
+                SCHED --> CH1["CH1"]
+                SCHED --> CH2["CH2"]
+                SCHED --> CH3["..."]
+                SCHED --> CH7["CH7"]
+                
+                BW["Aggregate: 900 GB/s<br/>(all 8 channels parallel)"]
+                
+                CH0 & CH1 & CH2 & CH3 & CH7 --> BW
+                
+                style L2 fill:#e3f2fd
+                style BW fill:#c8e6c9
         </div>
+        <div class="figure-caption">Figure 7.4: HBM8 memory controller block diagram</div>
 
         <h2>7.7 Bandwidth Utilization and Bottlenecks</h2>
 
-        <h3>Calculating Peak Bandwidth</h3>
-
-        <div class="code-block">
-<pre>Example: NVIDIA H100 with HBM3
-
-Peak bandwidth:
-  Bus width = 1024 bits = 128 bytes
-  Clock frequency = 2.0 GHz
-  Peak = 128 bytes/cycle × 2.0 GHz = 256 GB/s per module
-  
-  8 HBM stacks total = 256 × 4 = ~960 GB/s (marketing "1 TB/s")
-
-Achieved bandwidth:
-  Real workload: ~800 GB/s (85% utilization)
-  Streaming kernel: ~700 GB/s
-  Latency-bound kernel: ~200 GB/s
-
-Bandwidth equation:
-  Sustained BW = Peak BW × Memory Efficiency
-  Memory Efficiency = (Useful bytes) / (Total bytes transferred)
-  
-  Example: Vector copy (y = x)
-    Useful bytes: 8 bytes (4B load + 4B store)
-    Peak achieved: ~850 GB/s
-    Theoretical peak: 960 GB/s
-    Efficiency: 850 / 960 ≈ 88%</pre>
-        </div>
-
         <h3>Compute-Bound vs Memory-Bound Kernels</h3>
 
-        <p>
-            A kernel is limited by either compute or memory:
-        </p>
-
-        <div class="code-block">
-<pre>Operational Intensity = (FLOPs) / (Bytes transferred)
-
-Example 1: Vector scale (y = a * x)
-  FLOPs = 1 (multiply)
-  Bytes = 4 + 4 = 8 (one load, one store)
-  Intensity = 1 / 8 = 0.125 FLOP/byte
-  
-  GPU compute: 141 TFLOPS (H100)
-  GPU bandwidth: 960 GB/s
-  Peak FLOP rate from bandwidth: 960 × 0.125 = 120 TFLOPS
-  
-  Result: LIMITED BY BANDWIDTH (120 < 141)
-  
-Example 2: Matrix multiplication (C = A × B, 32×32 blocks)
-  FLOPs = 32 × 32 × 64 = 65,536 (for 32×32×32 computation)
-  Bytes = 32×32×4 + 32×32×4 = 8,192 (load A & B once, via tiling)
-  Intensity = 65,536 / 8,192 = 8 FLOPs/byte
-  
-  Peak FLOP rate from bandwidth: 960 GB/s × 8 = 7,680 TFLOPS
-  
-  Result: LIMITED BY COMPUTE (141 < 7,680)
-  This is why matrix multiplication is the "killer app" for GPUs!
-  Data reuse is high, allowing compute to be the bottleneck.</pre>
+        <div class="mermaid">
+            flowchart LR
+                subgraph Analysis["OPERATIONAL INTENSITY ANALYSIS"]
+                    OI["Operational Intensity<br/>= FLOPs / Bytes"]
+                end
+                
+                subgraph MemBound["MEMORY-BOUND<br/>(Intensity < 1)"]
+                    MB1["Vector scale: y = a*x"]
+                    MB2["1 FLOP / 8 bytes = 0.125"]
+                    MB3["Limited by bandwidth"]
+                end
+                
+                subgraph CompBound["COMPUTE-BOUND<br/>(Intensity > 5)"]
+                    CB1["Matrix multiply: C = A×B"]
+                    CB2["65K FLOPs / 8KB = 8"]
+                    CB3["Limited by ALUs"]
+                end
+                
+                Analysis --> MemBound
+                Analysis --> CompBound
+                
+                style MemBound fill:#ffcdd2
+                style CompBound fill:#c8e6c9
         </div>
 
-        <h2>7.8 Memory Addressing Modes</h2>
-
-        <h3>Virtual Memory and Page Tables</h3>
-
-        <p>
-            Modern GPUs support virtual memory (NVIDIA Maxwell onwards):
-        </p>
-
-        <ul>
-            <li>64-bit virtual addresses</li>
-            <li>4 KB page size (configurable)</li>
-            <li>TLB (Translation Lookaside Buffer) caches virtual→physical mappings</li>
-            <li>Page faults handled by driver (slower but necessary)</li>
-        </ul>
-
-        <div class="code-block">
-<pre>Virtual Address Translation:
-  CUDA/HIP kernel sees 64-bit virtual addresses
-  ┌──────────────────────────────────────────┐
-  │ Virtual Address (64-bit)                 │
-  │ [63:12] Virtual Page Number (VPN)        │
-  │ [11:0] Page Offset                       │
-  └──────────────────┬───────────────────────┘
-                     │
-                     ▼
-            Check TLB (Translation Lookaside Buffer)
-            If miss → Page Table Lookup
-                     │
-                     ▼
-  ┌──────────────────────────────────────────┐
-  │ Page Table (in DRAM)                     │
-  │ Maps VPN → Physical Page Number (PPN)    │
-  └──────────────────┬───────────────────────┘
-                     │
-                     ▼
-  ┌──────────────────────────────────────────┐
-  │ Physical Address (40-bit)                │
-  │ [39:12] Physical Page Number (PPN)       │
-  │ [11:0] Page Offset                       │
-  └──────────────────┬───────────────────────┘
-                     │
-                     ▼
-            Access physical memory (L1/L2/DRAM)</pre>
-        </div>
-
-        <h2>7.9 Bank Conflicts and Shared Memory Optimization</h2>
+        <h2>7.8 Bank Conflicts and Shared Memory Optimization</h2>
 
         <h3>Bank Conflict Problem</h3>
 
-        <p>
-            Shared memory is fast but has limited bandwidth due to banking:
-        </p>
-
-        <div class="figure">
-            <pre>Shared Memory Banks (32 banks, NVIDIA A100):
-┌─────────────────────────────────────────────────────┐
-│ SRAM: 96 KB = 24K words of 32-bit data              │
-│ Divided into 32 banks (3 KB each)                   │
-├─────────────────────────────────────────────────────┤
-│ Bank 0:  addr % 32 == 0 (bytes 0, 128, 256, ...)  │
-│ Bank 1:  addr % 32 == 4 (bytes 4, 132, 260, ...)  │
-│ Bank 2:  addr % 32 == 8 (bytes 8, 136, 264, ...)  │
-│ ...                                                 │
-│ Bank 31: addr % 32 == 124                           │
-└─────────────────────────────────────────────────────┘
-
-Good access pattern (no bank conflicts):
-  Thread 0 reads address 0 (Bank 0) ✓
-  Thread 1 reads address 4 (Bank 1) ✓
-  Thread 2 reads address 8 (Bank 2) ✓
-  → All 32 threads access different banks
-  → No stalls, 32× parallelism
-  
-Bad access pattern (bank conflict):
-  Thread 0 reads address 0 (Bank 0) ✓
-  Thread 1 reads address 0 (Bank 0) ✗ CONFLICT!
-  Thread 2 reads address 0 (Bank 0) ✗ CONFLICT!
-  → All threads access same bank
-  → Serialized, only 1 thread per cycle
-  → 32 cycles to service 32 threads!</pre>
-            <div class="figure-caption">Figure 7.4: Shared memory bank conflicts</div>
+        <div class="mermaid">
+            flowchart TB
+                subgraph Banks["SHARED MEMORY: 32 BANKS"]
+                    B0["Bank 0:<br/>addr % 32 == 0"]
+                    B1["Bank 1:<br/>addr % 32 == 4"]
+                    B2["Bank 2:<br/>addr % 32 == 8"]
+                    B31["Bank 31:<br/>addr % 32 == 124"]
+                end
+                
+                subgraph Good["GOOD ACCESS PATTERN"]
+                    G1["Thread 0 → Bank 0 ✓"]
+                    G2["Thread 1 → Bank 1 ✓"]
+                    G3["Thread 2 → Bank 2 ✓"]
+                    G4["All 32 threads → different banks"]
+                    G5["No conflicts! 32× parallel"]
+                end
+                
+                subgraph Bad["BAD ACCESS PATTERN"]
+                    B1x["Thread 0 → Bank 0 ✓"]
+                    B2x["Thread 1 → Bank 0 ✗ CONFLICT!"]
+                    B3x["Thread 2 → Bank 0 ✗ CONFLICT!"]
+                    B4x["Serialized: 32 cycles!"]
+                end
+                
+                style Good fill:#c8e6c9
+                style Bad fill:#ffcdd2
         </div>
+        <div class="figure-caption">Figure 7.5: Shared memory bank conflicts</div>
 
         <h3>Avoiding Bank Conflicts</h3>
 
         <div class="code-block">
-<pre>// BAD: All threads in warp access same location
+<pre>// BAD: All threads access same location
 __shared__ float data[32];
 float x = data[0];  // 32 threads → same bank conflict!
 
@@ -605,26 +392,16 @@ __shared__ float data[32];
 int tid = threadIdx.x;
 float x = data[tid];  // Each thread gets different bank
 
-// GOOD: 2D array access pattern
+// GOOD: 2D array with column access
 __shared__ float matrix[32][32];
 int row = threadIdx.y;
 int col = threadIdx.x;
-float x = matrix[row][col];  // Stride across banks
-
-// BAD: 2D transpose-like access
-__shared__ float matrix[32][32];
-int row = threadIdx.x;   // Fast-varying dimension = rows
-int col = threadIdx.y;
-float x = matrix[row][col];  // Threads in same row conflict!</pre>
+float x = matrix[row][col];  // Stride across banks</pre>
         </div>
 
-        <h2>7.10 Case Study: Tiny GPU Memory System</h2>
+        <h2>7.9 Case Study: Tiny GPU Memory System</h2>
 
-        <h3>Tiny GPU Simplified Memory</h3>
-
-        <p>
-            Tiny GPU uses a simplified memory model (for learning):
-        </p>
+        <p>Tiny GPU uses a simplified memory model (for learning):</p>
 
         <ul>
             <li>Only two memory levels: registers + global DRAM</li>
@@ -639,8 +416,7 @@ module controller #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 32
 ) (
-    input clk,
-    input reset,
+    input clk, reset,
     
     // From cores (multiple read/write requests)
     input [NUM_CORES-1:0] mem_write_valid,
@@ -657,11 +433,7 @@ module controller #(
     output reg [ADDR_WIDTH-1:0] dram_addr,
     output reg [DATA_WIDTH-1:0] dram_data
 );
-
 // Simple round-robin arbiter for multiple requests
-// Priority rotates: Core 0 → Core 1 → ... → Core N-1 → Core 0
-// Simulates contention, models real memory bandwidth limits
-
 endmodule</pre>
         </div>
 
@@ -673,9 +445,8 @@ endmodule</pre>
         </div>
 
         <div class="key-takeaway">
-            <strong>2. Bandwidth != Latency:</strong> HBM gives 900 GB/s but still takes 
-            ~200 cycles to fetch data. Latency matters more for small working sets; bandwidth 
-            matters for streaming data.
+            <strong>2. Bandwidth ≠ Latency:</strong> HBM gives 900 GB/s but still takes 
+            ~200 cycles to fetch data. Latency matters for small working sets; bandwidth for streaming.
         </div>
 
         <div class="key-takeaway">
@@ -710,28 +481,13 @@ endmodule</pre>
             shared memory tiling (32×32 blocks). Estimate the speedup over naive global memory access.
         </div>
 
-        <div class="exercise">
-            <strong>Exercise 7.4:</strong> Given an L2 cache with 2% miss rate, estimate the DRAM 
-            bandwidth demand for a GPU running at 2 GHz with:
-            <ul>
-                <li>4 SMs</li>
-                <li>64 KB/SM L2 misses per cycle</li>
-            </ul>
-        </div>
-
-        <div class="exercise">
-            <strong>Exercise 7.5:</strong> Design a shared memory access pattern for a reduction 
-            operation (sum of N elements) that avoids bank conflicts. Justify your design.
-        </div>
-
         <h2>Further Reading</h2>
 
         <ul>
-            <li><strong>NVIDIA CUDA Toolkit Documentation:</strong> <a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/" target="_blank">Memory hierarchy details</a></li>
-            <li><strong>GPU Gems 3, Chapter 29:</strong> "Optimizing CUDA" – bank conflicts and cache optimization strategies</li>
-            <li><strong>The CUDA Handbook by N. Wilt:</strong> Comprehensive coverage of memory optimization</li>
-            <li><strong>AMD RDNA 2 ISA Reference:</strong> <a href="https://developer.amd.com/resources/documentation/amd-instinct/" target="_blank">HBM and memory architecture</a></li>
-            <li><strong>Open-source GPU simulators:</strong> <a href="https://github.com/gpucci/gpgpu-sim_distribution" target="_blank">GPGPU-Sim</a> – model memory hierarchy behavior</li>
+            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/" target="_blank">NVIDIA CUDA Toolkit Documentation</a></li>
+            <li>GPU Gems 3, Chapter 29: "Optimizing CUDA"</li>
+            <li>The CUDA Handbook by N. Wilt</li>
+            <li><a href="https://github.com/gpucci/gpgpu-sim_distribution" target="_blank">GPGPU-Sim</a> — model memory hierarchy behavior</li>
         </ul>
 
         <div class="chapter-nav">
@@ -742,5 +498,6 @@ endmodule</pre>
     </div>
 
     <script src="../script.js"></script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

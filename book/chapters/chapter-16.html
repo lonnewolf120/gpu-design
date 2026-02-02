@@ -1,40 +1,854 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 16: RTL Fundamentals for GPU Design | Create Your Own GPU</title>
+    <title>Chapter 16: RTL Fundamentals with SystemVerilog | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .file-header { background: #2d2d2d; color: #9cdcfe; padding: 8px 16px; border-radius: 8px 8px 0 0; font-size: 12px; font-family: monospace; margin-bottom: -20px; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-15.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-15.html">← Previous: Microarchitecture Fundamentals</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-17.html">Next →</a>
+            <a href="chapter-17.html">Next: GPU Core Design →</a>
         </div>
 
-        <h1>Chapter 16: RTL Fundamentals for GPU Design</h1>
-        <div style="color: #999; margin: 20px 0;">IV: Hardware Implementation • Reading time: ~60 min</div>
+        <h1>Chapter 16: RTL Fundamentals with SystemVerilog</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part IV: RTL Implementation</span>
+            <span>Reading time: ~70 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>Register-Transfer Level (RTL) is the abstraction level where digital designs are described in terms of registers, combinational logic, and the data transfers between them. SystemVerilog is the industry-standard language for RTL design and verification.</p>
         
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>RTL Fundamentals for GPU Design</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <p>This chapter teaches SystemVerilog fundamentals through examples from tiny-gpu's actual RTL code. By the end, you'll understand how to read, write, and modify hardware descriptions.</p>
+
+        <h2>16.1 SystemVerilog Basics</h2>
+
+        <h3>16.1.1 Module Structure</h3>
+        <p>Every hardware component is a <strong>module</strong>—a self-contained unit with inputs, outputs, and internal logic:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Basic module template</span>
+<span class="keyword">module</span> <span class="type">module_name</span> (
+    <span class="keyword">input</span>  <span class="keyword">wire</span> clk,          <span class="comment">// Clock signal</span>
+    <span class="keyword">input</span>  <span class="keyword">wire</span> reset,        <span class="comment">// Reset signal</span>
+    <span class="keyword">input</span>  <span class="keyword">wire</span> [7:0] data_in, <span class="comment">// 8-bit input</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span>  [7:0] data_out <span class="comment">// 8-bit output (registered)</span>
+);
+    <span class="comment">// Internal logic here</span>
+    
+<span class="keyword">endmodule</span>
+</code>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-15.html">← Previous</a>
+        <h3>16.1.2 Data Types</h3>
+
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Description</th><th>Use Case</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>wire</code></td><td>Combinational connection</td><td>Connecting modules, continuous assignments</td></tr>
+                <tr><td><code>reg</code></td><td>Storage element</td><td>Sequential logic, always blocks</td></tr>
+                <tr><td><code>logic</code></td><td>SystemVerilog unified type</td><td>Modern code (replaces wire/reg confusion)</td></tr>
+                <tr><td><code>[N-1:0]</code></td><td>Bit vector</td><td>Multi-bit signals (e.g., [7:0] = 8 bits)</td></tr>
+                <tr><td><code>integer</code></td><td>32-bit signed</td><td>Loop counters, non-synthesizable code</td></tr>
+            </tbody>
+        </table>
+
+        <h3>16.1.3 Number Literals</h3>
+
+        <div class="code-block">
+<code><span class="comment">// Format: &lt;size&gt;'&lt;base&gt;&lt;value&gt;</span>
+<span class="number">8'b10101010</span>    <span class="comment">// 8-bit binary: 170</span>
+<span class="number">8'hAA</span>          <span class="comment">// 8-bit hex: 170</span>
+<span class="number">8'd170</span>         <span class="comment">// 8-bit decimal: 170</span>
+<span class="number">16'h1234</span>       <span class="comment">// 16-bit hex</span>
+<span class="number">4'b0</span>           <span class="comment">// 4-bit zero</span>
+<span class="number">32'hDEAD_BEEF</span> <span class="comment">// Underscores for readability</span>
+
+<span class="comment">// tiny-gpu instruction encoding example</span>
+<span class="number">0b0101000011011110</span>  <span class="comment">// MUL R0, %blockIdx, %blockDim</span>
+<span class="number">0b1111000000000000</span>  <span class="comment">// RET</span>
+</code>
+        </div>
+
+        <h2>16.2 Combinational Logic</h2>
+
+        <p>Combinational logic produces outputs that depend only on current inputs (no memory):</p>
+
+        <h3>16.2.1 Continuous Assignment</h3>
+        <div class="code-block">
+<code><span class="comment">// Using 'assign' for simple combinational logic</span>
+<span class="keyword">wire</span> [7:0] sum;
+<span class="keyword">assign</span> sum = a + b;
+
+<span class="keyword">wire</span> is_zero;
+<span class="keyword">assign</span> is_zero = (sum == <span class="number">8'b0</span>);
+
+<span class="comment">// Conditional (ternary) operator</span>
+<span class="keyword">wire</span> [7:0] max_val;
+<span class="keyword">assign</span> max_val = (a > b) ? a : b;
+</code>
+        </div>
+
+        <h3>16.2.2 Always Combinational</h3>
+        <div class="code-block">
+<code><span class="comment">// Using always_comb for complex combinational logic</span>
+<span class="keyword">always_comb</span> <span class="keyword">begin</span>
+    <span class="keyword">case</span> (opcode)
+        <span class="number">4'b0001</span>: result = a + b;
+        <span class="number">4'b0010</span>: result = a - b;
+        <span class="number">4'b0011</span>: result = a * b;
+        <span class="number">4'b0100</span>: result = a / b;
+        <span class="keyword">default</span>: result = <span class="number">8'b0</span>;
+    <span class="keyword">endcase</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h3>16.2.3 tiny-gpu ALU Example</h3>
+        <p>The ALU performs arithmetic operations based on decoded control signals:</p>
+
+        <div class="file-header">src/alu.sv (simplified)</div>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">alu</span> (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    <span class="keyword">input</span> <span class="keyword">wire</span> enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [2:0] core_state,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [1:0] decoded_alu_arithmetic_mux,
+    <span class="keyword">input</span> <span class="keyword">reg</span> decoded_alu_output_mux,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] rs,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] rt,
+    <span class="keyword">output</span> <span class="keyword">wire</span> [7:0] alu_out
+);
+    <span class="comment">// Operation encodings</span>
+    <span class="keyword">localparam</span> ADD = <span class="number">2'b00</span>,
+               SUB = <span class="number">2'b01</span>,
+               MUL = <span class="number">2'b10</span>,
+               DIV = <span class="number">2'b11</span>;
+
+    <span class="keyword">reg</span> [7:0] alu_out_reg;
+    <span class="keyword">assign</span> alu_out = alu_out_reg;
+
+    <span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+        <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+            alu_out_reg &lt;= <span class="number">8'b0</span>;
+        <span class="keyword">end</span> <span class="keyword">else if</span> (enable) <span class="keyword">begin</span>
+            <span class="comment">// Execute when core_state == EXECUTE (3'b101)</span>
+            <span class="keyword">if</span> (core_state == <span class="number">3'b101</span>) <span class="keyword">begin</span>
+                <span class="keyword">if</span> (decoded_alu_output_mux == <span class="number">1</span>) <span class="keyword">begin</span>
+                    <span class="comment">// CMP: Set NZP flags</span>
+                    alu_out_reg &lt;= {<span class="number">5'b0</span>, (rs - rt > <span class="number">0</span>), (rs - rt == <span class="number">0</span>), (rs - rt &lt; <span class="number">0</span>)};
+                <span class="keyword">end</span> <span class="keyword">else begin</span>
+                    <span class="comment">// Arithmetic operations</span>
+                    <span class="keyword">case</span> (decoded_alu_arithmetic_mux)
+                        ADD: alu_out_reg &lt;= rs + rt;
+                        SUB: alu_out_reg &lt;= rs - rt;
+                        MUL: alu_out_reg &lt;= rs * rt;
+                        DIV: alu_out_reg &lt;= rs / rt;
+                    <span class="keyword">endcase</span>
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>16.3 Sequential Logic</h2>
+
+        <p>Sequential logic has memory—outputs depend on inputs AND current state:</p>
+
+        <h3>16.3.1 Flip-Flops and Registers</h3>
+        <div class="code-block">
+<code><span class="comment">// Basic D flip-flop</span>
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    q &lt;= d;  <span class="comment">// q captures d on rising clock edge</span>
+<span class="keyword">end</span>
+
+<span class="comment">// Flip-flop with synchronous reset</span>
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset)
+        q &lt;= <span class="number">8'b0</span>;
+    <span class="keyword">else</span>
+        q &lt;= d;
+<span class="keyword">end</span>
+
+<span class="comment">// Enable-controlled register</span>
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset)
+        q &lt;= <span class="number">8'b0</span>;
+    <span class="keyword">else if</span> (enable)
+        q &lt;= d;
+    <span class="comment">// else: q retains its value</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h3>16.3.2 tiny-gpu Register File</h3>
+        <p>The register file stores per-thread register values:</p>
+
+        <div class="file-header">src/registers.sv (simplified)</div>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">registers</span> #(
+    <span class="keyword">parameter</span> THREADS_PER_BLOCK = <span class="number">4</span>,
+    <span class="keyword">parameter</span> THREAD_ID = <span class="number">0</span>,
+    <span class="keyword">parameter</span> DATA_BITS = <span class="number">8</span>
+) (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    <span class="keyword">input</span> <span class="keyword">wire</span> enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [7:0] block_id,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [2:0] core_state,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [3:0] decoded_rd_address,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [3:0] decoded_rs_address,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [3:0] decoded_rt_address,
+    <span class="keyword">input</span> <span class="keyword">reg</span> decoded_reg_write_enable,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [1:0] decoded_reg_input_mux,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [DATA_BITS-1:0] decoded_immediate,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [DATA_BITS-1:0] alu_out,
+    <span class="keyword">input</span> <span class="keyword">reg</span> [DATA_BITS-1:0] lsu_out,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] rs,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [7:0] rt
+);
+    <span class="comment">// 16 registers per thread</span>
+    <span class="keyword">reg</span> [7:0] registers[15:0];
+
+    <span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+        <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+            <span class="comment">// Initialize all registers</span>
+            registers[0] &lt;= <span class="number">8'b0</span>;
+            <span class="comment">// ... registers 1-12 ...</span>
+            registers[13] &lt;= <span class="number">8'b0</span>;              <span class="comment">// %blockIdx</span>
+            registers[14] &lt;= THREADS_PER_BLOCK; <span class="comment">// %blockDim</span>
+            registers[15] &lt;= THREAD_ID;         <span class="comment">// %threadIdx</span>
+        <span class="keyword">end</span> <span class="keyword">else if</span> (enable) <span class="keyword">begin</span>
+            registers[13] &lt;= block_id;
+            
+            <span class="comment">// Read registers in REQUEST state</span>
+            <span class="keyword">if</span> (core_state == <span class="number">3'b011</span>) <span class="keyword">begin</span>
+                rs &lt;= registers[decoded_rs_address];
+                rt &lt;= registers[decoded_rt_address];
+            <span class="keyword">end</span>
+            
+            <span class="comment">// Write register in UPDATE state</span>
+            <span class="keyword">if</span> (core_state == <span class="number">3'b110</span> &amp;&amp; decoded_reg_write_enable) <span class="keyword">begin</span>
+                <span class="keyword">case</span> (decoded_reg_input_mux)
+                    <span class="number">2'b00</span>: registers[decoded_rd_address] &lt;= alu_out;
+                    <span class="number">2'b01</span>: registers[decoded_rd_address] &lt;= lsu_out;
+                    <span class="number">2'b10</span>: registers[decoded_rd_address] &lt;= decoded_immediate;
+                <span class="keyword">endcase</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>16.4 State Machines</h2>
+
+        <p>Finite State Machines (FSMs) are fundamental to control logic. The tiny-gpu scheduler is an excellent example:</p>
+
+        <h3>16.4.1 FSM Structure</h3>
+
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> FETCH : start
+    FETCH --> DECODE : instr_ready
+    DECODE --> REQUEST : decode_done
+    REQUEST --> WAIT : mem_request
+    WAIT --> EXECUTE : mem_ready
+    EXECUTE --> UPDATE : exec_done
+    UPDATE --> FETCH : !done
+    UPDATE --> IDLE : done
+        </div>
+
+        <h3>16.4.2 FSM Implementation Pattern</h3>
+        <div class="code-block">
+<code><span class="comment">// Two-process FSM (recommended style)</span>
+<span class="keyword">module</span> <span class="type">fsm_example</span> (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    <span class="keyword">input</span> <span class="keyword">wire</span> start,
+    <span class="keyword">input</span> <span class="keyword">wire</span> done_condition,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [2:0] state
+);
+    <span class="comment">// State encoding</span>
+    <span class="keyword">localparam</span> IDLE    = <span class="number">3'b000</span>,
+               FETCH   = <span class="number">3'b001</span>,
+               DECODE  = <span class="number">3'b010</span>,
+               REQUEST = <span class="number">3'b011</span>,
+               WAIT    = <span class="number">3'b100</span>,
+               EXECUTE = <span class="number">3'b101</span>,
+               UPDATE  = <span class="number">3'b110</span>;
+
+    <span class="keyword">reg</span> [2:0] next_state;
+
+    <span class="comment">// Sequential: State register</span>
+    <span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+        <span class="keyword">if</span> (reset)
+            state &lt;= IDLE;
+        <span class="keyword">else</span>
+            state &lt;= next_state;
+    <span class="keyword">end</span>
+
+    <span class="comment">// Combinational: Next state logic</span>
+    <span class="keyword">always_comb</span> <span class="keyword">begin</span>
+        next_state = state;  <span class="comment">// Default: stay in current state</span>
+        <span class="keyword">case</span> (state)
+            IDLE:    <span class="keyword">if</span> (start) next_state = FETCH;
+            FETCH:   next_state = DECODE;
+            DECODE:  next_state = REQUEST;
+            REQUEST: next_state = WAIT;
+            WAIT:    <span class="keyword">if</span> (mem_ready) next_state = EXECUTE;
+            EXECUTE: next_state = UPDATE;
+            UPDATE:  next_state = done_condition ? IDLE : FETCH;
+        <span class="keyword">endcase</span>
+    <span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>16.5 Module Instantiation and Hierarchy</h2>
+
+        <h3>16.5.1 Instantiating Modules</h3>
+        <div class="code-block">
+<code><span class="comment">// Instantiate a module</span>
+<span class="type">alu</span> alu_instance (
+    .clk(clk),
+    .reset(reset),
+    .enable(thread_enable),
+    .core_state(core_state),
+    .decoded_alu_arithmetic_mux(alu_op),
+    .decoded_alu_output_mux(is_cmp),
+    .rs(rs_value),
+    .rt(rt_value),
+    .alu_out(alu_result)
+);
+
+<span class="comment">// With parameters</span>
+<span class="type">registers</span> #(
+    .THREADS_PER_BLOCK(<span class="number">8</span>),
+    .THREAD_ID(<span class="number">3</span>),
+    .DATA_BITS(<span class="number">8</span>)
+) reg_file (
+    .clk(clk),
+    .reset(reset),
+    <span class="comment">// ... other ports</span>
+);
+</code>
+        </div>
+
+        <h3>16.5.2 Generate Blocks</h3>
+        <p>Generate blocks create multiple instances programmatically:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Create THREADS_PER_BLOCK ALU instances</span>
+<span class="keyword">genvar</span> i;
+<span class="keyword">generate</span>
+    <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; THREADS_PER_BLOCK; i = i + <span class="number">1</span>) <span class="keyword">begin</span> : thread_alus
+        <span class="type">alu</span> alu_inst (
+            .clk(clk),
+            .reset(reset),
+            .enable(thread_enable[i]),
+            .core_state(core_state),
+            .rs(rs_values[i]),
+            .rt(rt_values[i]),
+            .alu_out(alu_results[i])
+        );
+    <span class="keyword">end</span>
+<span class="keyword">endgenerate</span>
+</code>
+        </div>
+
+        <h2>16.6 Memory in SystemVerilog</h2>
+
+        <h3>16.6.1 Array Declarations</h3>
+        <div class="code-block">
+<code><span class="comment">// 1D array (register file)</span>
+<span class="keyword">reg</span> [7:0] registers[15:0];  <span class="comment">// 16 × 8-bit registers</span>
+
+<span class="comment">// 2D array (memory)</span>
+<span class="keyword">reg</span> [7:0] memory[0:255];   <span class="comment">// 256 × 8-bit memory</span>
+
+<span class="comment">// Packed vs unpacked arrays</span>
+<span class="keyword">reg</span> [3:0][7:0] packed_data;   <span class="comment">// 32 bits, accessed as packed_data[byte][bit]</span>
+<span class="keyword">reg</span> [7:0] unpacked_data[3:0]; <span class="comment">// 4 separate 8-bit elements</span>
+</code>
+        </div>
+
+        <h3>16.6.2 Memory Read/Write</h3>
+        <div class="code-block">
+<code><span class="comment">// Synchronous memory (infers BRAM)</span>
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (write_enable)
+        memory[address] &lt;= write_data;
+    read_data &lt;= memory[address];  <span class="comment">// Read on same clock</span>
+<span class="keyword">end</span>
+
+<span class="comment">// Asynchronous read (infers distributed RAM/LUTs)</span>
+<span class="keyword">assign</span> read_data = memory[address];  <span class="comment">// Combinational read</span>
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (write_enable)
+        memory[address] &lt;= write_data;
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h2>16.7 Common Patterns in tiny-gpu</h2>
+
+        <h3>16.7.1 Signal Packing/Unpacking</h3>
+        <p>tiny-gpu often packs multiple channel signals into single buses:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Pack 4 channels of 8-bit data into 32-bit bus</span>
+<span class="keyword">wire</span> [31:0] packed_data;
+<span class="keyword">assign</span> packed_data = {channel3, channel2, channel1, channel0};
+
+<span class="comment">// Unpack</span>
+<span class="keyword">wire</span> [7:0] ch0 = packed_data[7:0];
+<span class="keyword">wire</span> [7:0] ch1 = packed_data[15:8];
+<span class="keyword">wire</span> [7:0] ch2 = packed_data[23:16];
+<span class="keyword">wire</span> [7:0] ch3 = packed_data[31:24];
+</code>
+        </div>
+
+        <h3>16.7.2 Parameterized Design</h3>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">parameterized_module</span> #(
+    <span class="keyword">parameter</span> WIDTH = <span class="number">8</span>,
+    <span class="keyword">parameter</span> DEPTH = <span class="number">16</span>
+) (
+    <span class="keyword">input</span>  <span class="keyword">wire</span> [WIDTH-1:0] data_in,
+    <span class="keyword">output</span> <span class="keyword">wire</span> [WIDTH-1:0] data_out,
+    <span class="keyword">input</span>  <span class="keyword">wire</span> [$clog2(DEPTH)-1:0] addr  <span class="comment">// log2 for address width</span>
+);
+    <span class="keyword">reg</span> [WIDTH-1:0] storage[DEPTH-1:0];
+    <span class="comment">// ...</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>16.8 Best Practices</h2>
+
+        <div class="warning-box">
+            <strong>Common Pitfalls to Avoid:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>Unintended latches:</strong> Always assign default values in combinational blocks</li>
+                <li><strong>Multiple drivers:</strong> Only one source can drive a wire</li>
+                <li><strong>Blocking vs non-blocking:</strong> Use <code>&lt;=</code> in sequential, <code>=</code> in combinational</li>
+                <li><strong>Clock domain crossing:</strong> Synchronize signals between clock domains</li>
+                <li><strong>Reset initialization:</strong> Always reset all registers to known values</li>
+            </ul>
+        </div>
+
+        <div class="info-box">
+            <strong>tiny-gpu Conventions:</strong>
+            <ul style="margin: 10px 0;">
+                <li>Uses <code>`default_nettype none</code> to catch undeclared wires</li>
+                <li>Synchronous design with <code>always @(posedge clk)</code></li>
+                <li>Parameters for configurability (THREADS_PER_BLOCK, DATA_BITS)</li>
+                <li>State machines use localparam encodings</li>
+            </ul>
+        </div>
+
+        <h2>16.9 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 16.1: Decode the ALU Mux</h4>
+            <p>In the ALU code, <code>decoded_alu_arithmetic_mux</code> is 2 bits. What operation does each encoding perform?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>From the localparam declarations:</p>
+                    <ul>
+                        <li><code>2'b00</code> (0): ADD (rs + rt)</li>
+                        <li><code>2'b01</code> (1): SUB (rs - rt)</li>
+                        <li><code>2'b10</code> (2): MUL (rs * rt)</li>
+                        <li><code>2'b11</code> (3): DIV (rs / rt)</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 16.2: Add a Modulo Operation</h4>
+            <p>Extend the ALU to support a MOD (modulo) operation. What changes are needed?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>// 1. Expand mux to 3 bits (or add new opcode)
+localparam ADD = 3'b000,
+           SUB = 3'b001,
+           MUL = 3'b010,
+           DIV = 3'b011,
+           MOD = 3'b100;  // New!
+
+// 2. Add case in ALU
+case (decoded_alu_arithmetic_mux)
+    ADD: alu_out_reg &lt;= rs + rt;
+    SUB: alu_out_reg &lt;= rs - rt;
+    MUL: alu_out_reg &lt;= rs * rt;
+    DIV: alu_out_reg &lt;= rs / rt;
+    MOD: alu_out_reg &lt;= rs % rt;  // New!
+endcase
+
+// 3. Update decoder to generate MOD encoding
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 16.3: Counter Module</h4>
+            <p>Write a parameterized counter module with:</p>
+            <ul>
+                <li>Configurable width (default 8 bits)</li>
+                <li>Enable signal</li>
+                <li>Synchronous reset</li>
+                <li>Overflow output flag</li>
+            </ul>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>module counter #(
+    parameter WIDTH = 8
+) (
+    input  wire clk,
+    input  wire reset,
+    input  wire enable,
+    output reg [WIDTH-1:0] count,
+    output wire overflow
+);
+    assign overflow = (count == {WIDTH{1'b1}}) &amp;&amp; enable;
+    
+    always @(posedge clk) begin
+        if (reset)
+            count &lt;= {WIDTH{1'b0}};
+        else if (enable)
+            count &lt;= count + 1'b1;
+    end
+endmodule
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <h2>16.10 Deep Dive: The Instruction Decoder</h2>
+
+        <p>The decoder transforms 16-bit instruction words into control signals that orchestrate the entire pipeline. Understanding it is key to understanding how instructions execute.</p>
+
+        <h3>16.10.1 Instruction Format</h3>
+
+        <div class="mermaid">
+packet-beta
+    0-3: "Opcode"
+    4-7: "Rd"
+    8-11: "Rs"
+    12-15: "Rt"
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Opcode</th><th>Instruction</th><th>Format</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>0000</td><td>NOP</td><td>-</td><td>No operation</td></tr>
+                <tr><td>0001</td><td>BRnzp</td><td>nzp, imm8</td><td>Branch if NZP matches</td></tr>
+                <tr><td>0010</td><td>CMP</td><td>rs, rt</td><td>Compare, set NZP flags</td></tr>
+                <tr><td>0011</td><td>ADD</td><td>rd, rs, rt</td><td>rd = rs + rt</td></tr>
+                <tr><td>0100</td><td>SUB</td><td>rd, rs, rt</td><td>rd = rs - rt</td></tr>
+                <tr><td>0101</td><td>MUL</td><td>rd, rs, rt</td><td>rd = rs × rt</td></tr>
+                <tr><td>0110</td><td>DIV</td><td>rd, rs, rt</td><td>rd = rs ÷ rt</td></tr>
+                <tr><td>0111</td><td>LDR</td><td>rd, rs</td><td>rd = mem[rs]</td></tr>
+                <tr><td>1000</td><td>STR</td><td>rs, rt</td><td>mem[rs] = rt</td></tr>
+                <tr><td>1001</td><td>CONST</td><td>rd, imm8</td><td>rd = immediate</td></tr>
+                <tr><td>1111</td><td>RET</td><td>-</td><td>End thread execution</td></tr>
+            </tbody>
+        </table>
+
+        <h3>16.10.2 Decoder Control Signals</h3>
+
+        <div class="file-header">src/decoder.sv - Control Signal Generation</div>
+        <div class="code-block">
+<code><span class="keyword">case</span> (instruction[15:12])
+    ADD: <span class="keyword">begin</span>
+        decoded_reg_write_enable <= <span class="number">1</span>;       <span class="comment">// Write result to rd</span>
+        decoded_reg_input_mux <= <span class="number">2'b00</span>;      <span class="comment">// Select ALU output</span>
+        decoded_alu_arithmetic_mux <= <span class="number">2'b00</span>; <span class="comment">// ALU: ADD</span>
+    <span class="keyword">end</span>
+    LDR: <span class="keyword">begin</span>
+        decoded_reg_write_enable <= <span class="number">1</span>;       <span class="comment">// Write to rd</span>
+        decoded_mem_read_enable <= <span class="number">1</span>;        <span class="comment">// Enable memory read</span>
+        decoded_reg_input_mux <= <span class="number">2'b01</span>;      <span class="comment">// Select LSU output</span>
+    <span class="keyword">end</span>
+    STR: <span class="keyword">begin</span>
+        decoded_mem_write_enable <= <span class="number">1</span>;       <span class="comment">// Enable memory write</span>
+    <span class="keyword">end</span>
+    CONST: <span class="keyword">begin</span>
+        decoded_reg_write_enable <= <span class="number">1</span>;       <span class="comment">// Write to rd</span>
+        decoded_reg_input_mux <= <span class="number">2'b10</span>;      <span class="comment">// Select immediate value</span>
+    <span class="keyword">end</span>
+    CMP: <span class="keyword">begin</span>
+        decoded_alu_output_mux <= <span class="number">1</span>;         <span class="comment">// ALU outputs NZP flags</span>
+        decoded_nzp_write_enable <= <span class="number">1</span>;       <span class="comment">// Update NZP register</span>
+    <span class="keyword">end</span>
+    BRnzp: <span class="keyword">begin</span>
+        decoded_pc_mux <= <span class="number">1</span>;                 <span class="comment">// Enable branch logic</span>
+    <span class="keyword">end</span>
+    RET: <span class="keyword">begin</span>
+        decoded_ret <= <span class="number">1</span>;                    <span class="comment">// Signal thread termination</span>
+    <span class="keyword">end</span>
+<span class="keyword">endcase</span>
+</code>
+        </div>
+
+        <h3>16.10.3 Register Input Multiplexer</h3>
+
+        <p>The <code>decoded_reg_input_mux</code> signal selects what gets written to the destination register:</p>
+
+        <table>
+            <thead>
+                <tr><th>Value</th><th>Source</th><th>Used By</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>2'b00</td><td>ALU output</td><td>ADD, SUB, MUL, DIV</td></tr>
+                <tr><td>2'b01</td><td>LSU output (memory read)</td><td>LDR</td></tr>
+                <tr><td>2'b10</td><td>Immediate value</td><td>CONST</td></tr>
+            </tbody>
+        </table>
+
+        <h2>16.11 Deep Dive: The Program Counter Unit</h2>
+
+        <p>The PC unit handles instruction sequencing and branching. Each thread has its own PC unit, though tiny-gpu doesn't support branch divergence (all threads take the same path).</p>
+
+        <h3>16.11.1 NZP Flags for Conditional Branching</h3>
+
+        <p>The NZP (Negative/Zero/Positive) register stores comparison results:</p>
+
+        <div class="info-box">
+            <p><strong>NZP Encoding:</strong></p>
+            <ul>
+                <li><code>nzp[2]</code> = <strong>N</strong>egative: set when rs - rt &lt; 0</li>
+                <li><code>nzp[1]</code> = <strong>Z</strong>ero: set when rs - rt = 0</li>
+                <li><code>nzp[0]</code> = <strong>P</strong>ositive: set when rs - rt &gt; 0</li>
+            </ul>
+            <p>The CMP instruction sets these flags. BRnzp branches if any specified flag matches.</p>
+        </div>
+
+        <h3>16.11.2 PC Unit Implementation</h3>
+
+        <div class="file-header">src/pc.sv - Branch Logic</div>
+        <div class="code-block">
+<code><span class="keyword">reg</span> [<span class="number">2</span>:<span class="number">0</span>] nzp;  <span class="comment">// NZP condition register</span>
+
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (core_state == EXECUTE) <span class="keyword">begin</span>
+        <span class="keyword">if</span> (decoded_pc_mux == <span class="number">1</span>) <span class="keyword">begin</span>
+            <span class="comment">// BRnzp instruction: check if any NZP flag matches</span>
+            <span class="keyword">if</span> ((nzp & decoded_nzp) != <span class="number">3'b0</span>) <span class="keyword">begin</span>
+                <span class="comment">// Branch taken: jump to immediate address</span>
+                next_pc <= decoded_immediate;
+            <span class="keyword">end</span> <span class="keyword">else</span> <span class="keyword">begin</span>
+                <span class="comment">// Branch not taken: continue to next instruction</span>
+                next_pc <= current_pc + <span class="number">1</span>;
+            <span class="keyword">end</span>
+        <span class="keyword">end</span> <span class="keyword">else</span> <span class="keyword">begin</span>
+            <span class="comment">// Normal instruction: proceed to next</span>
+            next_pc <= current_pc + <span class="number">1</span>;
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    
+    <span class="keyword">if</span> (core_state == UPDATE && decoded_nzp_write_enable) <span class="keyword">begin</span>
+        <span class="comment">// CMP instruction: update NZP from ALU comparison result</span>
+        nzp <= alu_out[<span class="number">2</span>:<span class="number">0</span>];
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h3>16.11.3 Branch Example: Loop Control</h3>
+
+        <div class="code-block">
+<code><span class="comment">; Loop that iterates k from 0 to N-1</span>
+CONST R9, #0          <span class="comment">; k = 0</span>
+CONST R2, #4          <span class="comment">; N = 4</span>
+LOOP:
+  <span class="comment">; ... loop body ...</span>
+  ADD R9, R9, #1      <span class="comment">; k++</span>
+  CMP R9, R2          <span class="comment">; Compare k to N → sets NZP</span>
+  BRn LOOP            <span class="comment">; If k &lt; N (negative), branch to LOOP</span>
+</code>
+        </div>
+
+        <p><strong>How it works:</strong></p>
+        <ol>
+            <li>CMP computes R9 - R2, sets NZP flags based on result</li>
+            <li>If k &lt; N, result is negative, so nzp[2] (N flag) is set</li>
+            <li>BRn has decoded_nzp = 3'b100 (check N flag only)</li>
+            <li>(nzp & decoded_nzp) = (100 & 100) = 100 ≠ 0, so branch is taken</li>
+        </ol>
+
+        <h2>16.12 Deep Dive: The Load-Store Unit</h2>
+
+        <p>The LSU handles memory access for LDR and STR instructions. It uses a 4-state FSM to manage the asynchronous memory handshake.</p>
+
+        <h3>16.12.1 LSU State Machine</h3>
+
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> REQUESTING : core_state == REQUEST
+    REQUESTING --> WAITING : issue mem request
+    WAITING --> DONE : mem_ready
+    DONE --> IDLE : core_state == UPDATE
+        </div>
+
+        <h3>16.12.2 Memory Handshake Protocol</h3>
+
+        <p>The LSU uses a valid/ready handshake with the memory controller:</p>
+
+        <table>
+            <thead>
+                <tr><th>Signal</th><th>Direction</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>mem_read_valid</td><td>LSU → Controller</td><td>LSU requesting a read</td></tr>
+                <tr><td>mem_read_address</td><td>LSU → Controller</td><td>Address to read from</td></tr>
+                <tr><td>mem_read_ready</td><td>Controller → LSU</td><td>Data is valid</td></tr>
+                <tr><td>mem_read_data</td><td>Controller → LSU</td><td>The read data</td></tr>
+                <tr><td>mem_write_valid</td><td>LSU → Controller</td><td>LSU requesting a write</td></tr>
+                <tr><td>mem_write_address</td><td>LSU → Controller</td><td>Address to write to</td></tr>
+                <tr><td>mem_write_data</td><td>LSU → Controller</td><td>Data to write</td></tr>
+                <tr><td>mem_write_ready</td><td>Controller → LSU</td><td>Write completed</td></tr>
+            </tbody>
+        </table>
+
+        <h3>16.12.3 LSU Implementation</h3>
+
+        <div class="file-header">src/lsu.sv - Read Path</div>
+        <div class="code-block">
+<code><span class="keyword">if</span> (decoded_mem_read_enable) <span class="keyword">begin</span>  <span class="comment">// LDR instruction</span>
+    <span class="keyword">case</span> (lsu_state)
+        IDLE: <span class="keyword">begin</span>
+            <span class="keyword">if</span> (core_state == REQUEST)
+                lsu_state <= REQUESTING;
+        <span class="keyword">end</span>
+        REQUESTING: <span class="keyword">begin</span>
+            mem_read_valid <= <span class="number">1</span>;
+            mem_read_address <= rs;  <span class="comment">// Address from source register</span>
+            lsu_state <= WAITING;
+        <span class="keyword">end</span>
+        WAITING: <span class="keyword">begin</span>
+            <span class="keyword">if</span> (mem_read_ready) <span class="keyword">begin</span>
+                mem_read_valid <= <span class="number">0</span>;
+                lsu_out <= mem_read_data;  <span class="comment">// Capture read data</span>
+                lsu_state <= DONE;
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+        DONE: <span class="keyword">begin</span>
+            <span class="keyword">if</span> (core_state == UPDATE)
+                lsu_state <= IDLE;
+        <span class="keyword">end</span>
+    <span class="keyword">endcase</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <div class="warning-box">
+            <p><strong>⚠️ Address Register Semantics:</strong></p>
+            <ul>
+                <li><strong>LDR rd, rs:</strong> Read from mem[rs], store in rd</li>
+                <li><strong>STR rs, rt:</strong> Write rt to mem[rs] (rs = address, rt = data)</li>
+            </ul>
+            <p>This differs from some ISAs where the destination register comes first. Check the actual RTL when implementing new instructions!</p>
+        </div>
+
+        <h3>16.12.4 Timing Diagram: LDR Instruction</h3>
+
+        <div class="code-block" style="font-family: monospace; font-size: 11px; line-height: 1.4;">
+<pre>
+Cycle:          1       2       3       4       5       6       7
+core_state:   REQUEST │ WAIT  │ WAIT  │ WAIT  │EXECUTE│UPDATE │ FETCH
+lsu_state:     IDLE   │REQSTNG│WAITING│WAITING│ DONE  │ IDLE  │ IDLE
+mem_read_valid:  0    │   1   │   1   │   1   │   0   │   0   │   0
+mem_read_ready:  0    │   0   │   0   │   1   │   1   │   0   │   0
+mem_read_data:   X    │   X   │   X   │ DATA  │ DATA  │   X   │   X
+lsu_out:         X    │   X   │   X   │   X   │ DATA  │ DATA  │   X
+</pre>
+        </div>
+
+        <p>The memory controller may take multiple cycles to respond, hence the WAITING state.</p>
+
+        <h2>16.13 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>📦 Modules are building blocks:</strong> Every hardware component is a module with defined inputs, outputs, and internal logic. Hierarchy is built by instantiating modules within modules.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ Combinational vs Sequential:</strong> Combinational logic (assign, always_comb) has no memory. Sequential logic (always @posedge clk) creates registers that store state.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔄 FSMs control behavior:</strong> Finite State Machines orchestrate complex multi-cycle operations. Use two-process style for clarity (one for state register, one for next-state logic).</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔧 Parameters enable reuse:</strong> Parameterized modules (using #(parameter ...)) can be instantiated with different configurations, enabling design reuse.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚠️ Synthesis matters:</strong> Not all valid SystemVerilog synthesizes to hardware. Follow coding guidelines to ensure your RTL can be implemented in silicon.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-15.html">← Previous: Microarchitecture Fundamentals</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-17.html">Next →</a>
+            <a href="chapter-17.html">Next: GPU Core Design →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

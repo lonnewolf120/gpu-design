@@ -1,40 +1,552 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 18: Multi-Core GPU Architecture | Create Your Own GPU</title>
+    <title>Chapter 18: Multi-Core GPU Design | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .file-header { background: #2d2d2d; color: #9cdcfe; padding: 8px 16px; border-radius: 8px 8px 0 0; font-size: 12px; font-family: monospace; margin-bottom: -20px; }
+        .arch-diagram { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 30px; border-radius: 12px; margin: 20px 0; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-17.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-17.html">← Previous: GPU Core Design</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-19.html">Next →</a>
+            <a href="chapter-19.html">Next: Advanced RTL Techniques →</a>
         </div>
 
-        <h1>Chapter 18: Multi-Core GPU Architecture</h1>
-        <div style="color: #999; margin: 20px 0;">IV: Hardware Implementation • Reading time: ~60 min</div>
+        <h1>Chapter 18: Multi-Core GPU Design</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part IV: RTL Implementation</span>
+            <span>Reading time: ~60 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>A single core can execute one block of threads. To process multiple blocks in parallel, tiny-gpu instantiates multiple cores and coordinates them through a dispatcher. This chapter explores the top-level GPU architecture, block dispatching, and memory controller design.</p>
+
+        <h2>18.1 GPU Top-Level Architecture</h2>
+
+        <div class="arch-diagram">
+            <div class="mermaid">
+graph TB
+    subgraph "GPU Module"
+        DCR["Device Control Register"]
+        DISP["Dispatcher"]
         
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Multi-Core GPU Architecture</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        subgraph "Cores"
+            C0["Core 0"]
+            C1["Core 1"]
+            Cn["Core N..."]
+        end
+        
+        PMC["Program Memory<br/>Controller"]
+        DMC["Data Memory<br/>Controller"]
+        
+        DCR -->|thread_count| DISP
+        DISP -->|start, block_id| C0
+        DISP -->|start, block_id| C1
+        DISP -->|start, block_id| Cn
+        
+        C0 --> PMC
+        C1 --> PMC
+        Cn --> PMC
+        
+        C0 --> DMC
+        C1 --> DMC
+        Cn --> DMC
+    end
+    
+    PMEM["Program Memory"] <--> PMC
+    DMEM["Data Memory"] <--> DMC
+    
+    style DISP fill:#fff3e0,stroke:#f57c00
+    style DCR fill:#e8f5e9,stroke:#388e3c
+    style PMC fill:#e3f2fd,stroke:#1976d2
+    style DMC fill:#e3f2fd,stroke:#1976d2
+            </div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-17.html">← Previous</a>
+        <h3>18.1.1 GPU Parameters</h3>
+
+        <table>
+            <thead>
+                <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>NUM_CORES</td><td>2</td><td>Number of parallel compute cores</td></tr>
+                <tr><td>THREADS_PER_BLOCK</td><td>4</td><td>Threads each core can handle</td></tr>
+                <tr><td>DATA_MEM_NUM_CHANNELS</td><td>4</td><td>Concurrent data memory channels</td></tr>
+                <tr><td>PROGRAM_MEM_NUM_CHANNELS</td><td>1</td><td>Concurrent program memory channels</td></tr>
+                <tr><td>DATA_MEM_ADDR_BITS</td><td>8</td><td>256 data memory locations</td></tr>
+                <tr><td>PROGRAM_MEM_ADDR_BITS</td><td>8</td><td>256 instruction slots</td></tr>
+            </tbody>
+        </table>
+
+        <p>With default settings, the GPU has:</p>
+        <ul>
+            <li>2 cores × 4 threads/block = 8 threads executing in parallel</li>
+            <li>8 LSUs (one per thread) sharing 4 data memory channels</li>
+            <li>2 fetchers (one per core) sharing 1 program memory channel</li>
+        </ul>
+
+        <h2>18.2 The Dispatcher</h2>
+
+        <p>The dispatcher manages block-to-core assignment and tracks kernel execution:</p>
+
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE : reset
+    IDLE --> DISPATCH : start
+    
+    DISPATCH --> DISPATCH : core_done[i]<br/>dispatch next block
+    DISPATCH --> COMPLETE : all blocks done
+    
+    state DISPATCH {
+        [*] --> CHECK_CORES
+        CHECK_CORES --> ASSIGN : core ready
+        ASSIGN --> CHECK_CORES
+    }
+    
+    COMPLETE --> [*] : done=1
+        </div>
+
+        <h3>18.2.1 Block Assignment Algorithm</h3>
+
+        <div class="code-block">
+<code><span class="comment">// Calculate total blocks needed</span>
+<span class="keyword">wire</span> [7:0] total_blocks;
+<span class="keyword">assign</span> total_blocks = (thread_count + THREADS_PER_BLOCK - <span class="number">1</span>) / THREADS_PER_BLOCK;
+
+<span class="comment">// Track dispatch and completion</span>
+<span class="keyword">reg</span> [7:0] blocks_dispatched;  <span class="comment">// Blocks sent to cores</span>
+<span class="keyword">reg</span> [7:0] blocks_done;        <span class="comment">// Blocks finished</span>
+
+<span class="comment">// Example: 10 threads with THREADS_PER_BLOCK=4</span>
+<span class="comment">// total_blocks = (10 + 4 - 1) / 4 = 3 blocks</span>
+<span class="comment">// Block 0: threads 0-3 (4 threads)</span>
+<span class="comment">// Block 1: threads 4-7 (4 threads)</span>
+<span class="comment">// Block 2: threads 8-9 (2 threads)</span>
+</code>
+        </div>
+
+        <h3>18.2.2 Dispatcher Implementation</h3>
+
+        <div class="file-header">src/dispatch.sv</div>
+        <div class="code-block">
+<code><span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">if</span> (reset) <span class="keyword">begin</span>
+        done &lt;= <span class="number">0</span>;
+        blocks_dispatched = <span class="number">0</span>;
+        blocks_done = <span class="number">0</span>;
+        
+        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; NUM_CORES; i++) <span class="keyword">begin</span>
+            core_start[i] &lt;= <span class="number">0</span>;
+            core_reset[i] &lt;= <span class="number">1</span>;       <span class="comment">// Start with cores in reset</span>
+            core_block_id[i] &lt;= <span class="number">0</span>;
+            core_thread_count[i] &lt;= THREADS_PER_BLOCK;
+        <span class="keyword">end</span>
+    <span class="keyword">end</span> <span class="keyword">else if</span> (start) <span class="keyword">begin</span>
+        
+        <span class="comment">// Check if kernel is complete</span>
+        <span class="keyword">if</span> (blocks_done == total_blocks) <span class="keyword">begin</span>
+            done &lt;= <span class="number">1</span>;
+        <span class="keyword">end</span>
+
+        <span class="comment">// Assign blocks to ready cores</span>
+        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; NUM_CORES; i++) <span class="keyword">begin</span>
+            <span class="keyword">if</span> (core_reset[i]) <span class="keyword">begin</span>
+                core_reset[i] &lt;= <span class="number">0</span>;
+                
+                <span class="keyword">if</span> (blocks_dispatched &lt; total_blocks) <span class="keyword">begin</span>
+                    core_start[i] &lt;= <span class="number">1</span>;
+                    core_block_id[i] &lt;= blocks_dispatched;
+                    
+                    <span class="comment">// Last block may have fewer threads</span>
+                    core_thread_count[i] &lt;= (blocks_dispatched == total_blocks - <span class="number">1</span>)
+                        ? thread_count - (blocks_dispatched * THREADS_PER_BLOCK)
+                        : THREADS_PER_BLOCK;
+                    
+                    blocks_dispatched = blocks_dispatched + <span class="number">1</span>;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+
+        <span class="comment">// Handle core completion</span>
+        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; NUM_CORES; i++) <span class="keyword">begin</span>
+            <span class="keyword">if</span> (core_start[i] && core_done[i]) <span class="keyword">begin</span>
+                core_reset[i] &lt;= <span class="number">1</span>;     <span class="comment">// Reset core for next block</span>
+                core_start[i] &lt;= <span class="number">0</span>;
+                blocks_done = blocks_done + <span class="number">1</span>;
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</code>
+        </div>
+
+        <h3>18.2.3 Execution Timeline</h3>
+
+        <div class="mermaid">
+gantt
+    title Block Dispatch Timeline (10 threads, 2 cores, 4 threads/block)
+    dateFormat X
+    axisFormat %s
+    
+    section Core 0
+    Block 0 (threads 0-3)    :0, 10
+    Block 2 (threads 8-9)    :10, 8
+    
+    section Core 1
+    Block 1 (threads 4-7)    :0, 10
+        </div>
+
+        <h2>18.3 Memory Controller</h2>
+
+        <p>The memory controller multiplexes multiple consumers (fetchers or LSUs) onto limited memory channels:</p>
+
+        <div class="mermaid">
+graph LR
+    subgraph "Consumers (8 LSUs)"
+        LSU0["LSU 0"]
+        LSU1["LSU 1"]
+        LSU2["LSU 2"]
+        LSU7["LSU 7..."]
+    end
+    
+    subgraph "Controller"
+        ARB["Arbiter"]
+        CH0["Channel 0"]
+        CH1["Channel 1"]
+        CH2["Channel 2"]
+        CH3["Channel 3"]
+    end
+    
+    LSU0 --> ARB
+    LSU1 --> ARB
+    LSU2 --> ARB
+    LSU7 --> ARB
+    
+    ARB --> CH0
+    ARB --> CH1
+    ARB --> CH2
+    ARB --> CH3
+    
+    CH0 --> MEM["Data<br/>Memory"]
+    CH1 --> MEM
+    CH2 --> MEM
+    CH3 --> MEM
+    
+    style ARB fill:#fff3e0,stroke:#f57c00
+        </div>
+
+        <h3>18.3.1 Controller State Machine</h3>
+
+        <table>
+            <thead>
+                <tr><th>State</th><th>Value</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>IDLE</td><td>3'b000</td><td>Scan for pending requests</td></tr>
+                <tr><td>READ_WAITING</td><td>3'b010</td><td>Wait for memory read response</td></tr>
+                <tr><td>WRITE_WAITING</td><td>3'b011</td><td>Wait for memory write ack</td></tr>
+                <tr><td>READ_RELAYING</td><td>3'b100</td><td>Forward read data to consumer</td></tr>
+                <tr><td>WRITE_RELAYING</td><td>3'b101</td><td>Forward write ack to consumer</td></tr>
+            </tbody>
+        </table>
+
+        <h3>18.3.2 Controller Implementation</h3>
+
+        <div class="file-header">src/controller.sv</div>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">controller</span> #(
+    <span class="keyword">parameter</span> ADDR_BITS = <span class="number">8</span>,
+    <span class="keyword">parameter</span> DATA_BITS = <span class="number">16</span>,
+    <span class="keyword">parameter</span> NUM_CONSUMERS = <span class="number">4</span>,   <span class="comment">// LSUs or fetchers</span>
+    <span class="keyword">parameter</span> NUM_CHANNELS = <span class="number">1</span>,   <span class="comment">// Memory bandwidth</span>
+    <span class="keyword">parameter</span> WRITE_ENABLE = <span class="number">1</span>    <span class="comment">// 0 for program mem</span>
+) (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk,
+    <span class="keyword">input</span> <span class="keyword">wire</span> reset,
+    
+    <span class="comment">// Consumer Interface (many)</span>
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [NUM_CONSUMERS-1:0] consumer_read_valid,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [ADDR_BITS-1:0] consumer_read_address [NUM_CONSUMERS-1:0],
+    <span class="keyword">output</span> <span class="keyword">reg</span> [NUM_CONSUMERS-1:0] consumer_read_ready,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [DATA_BITS-1:0] consumer_read_data [NUM_CONSUMERS-1:0],
+    <span class="comment">// ... write signals ...</span>
+    
+    <span class="comment">// Memory Interface (limited channels)</span>
+    <span class="keyword">output</span> <span class="keyword">reg</span> [NUM_CHANNELS-1:0] mem_read_valid,
+    <span class="keyword">output</span> <span class="keyword">reg</span> [ADDR_BITS-1:0] mem_read_address [NUM_CHANNELS-1:0],
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [NUM_CHANNELS-1:0] mem_read_ready,
+    <span class="keyword">input</span>  <span class="keyword">reg</span> [DATA_BITS-1:0] mem_read_data [NUM_CHANNELS-1:0]
+    <span class="comment">// ... write signals ...</span>
+);
+
+<span class="comment">// Per-channel state tracking</span>
+<span class="keyword">reg</span> [2:0] controller_state [NUM_CHANNELS-1:0];
+<span class="keyword">reg</span> [$clog2(NUM_CONSUMERS)-1:0] current_consumer [NUM_CHANNELS-1:0];
+<span class="keyword">reg</span> [NUM_CONSUMERS-1:0] channel_serving_consumer;
+
+<span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; NUM_CHANNELS; i++) <span class="keyword">begin</span>
+        <span class="keyword">case</span> (controller_state[i])
+            IDLE: <span class="keyword">begin</span>
+                <span class="comment">// Scan for pending request not already being served</span>
+                <span class="keyword">for</span> (<span class="keyword">int</span> j = <span class="number">0</span>; j &lt; NUM_CONSUMERS; j++) <span class="keyword">begin</span>
+                    <span class="keyword">if</span> (consumer_read_valid[j] && !channel_serving_consumer[j]) <span class="keyword">begin</span>
+                        channel_serving_consumer[j] = <span class="number">1</span>;
+                        current_consumer[i] &lt;= j;
+                        mem_read_valid[i] &lt;= <span class="number">1</span>;
+                        mem_read_address[i] &lt;= consumer_read_address[j];
+                        controller_state[i] &lt;= READ_WAITING;
+                        <span class="keyword">break</span>;  <span class="comment">// Take first available request</span>
+                    <span class="keyword">end</span>
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            READ_WAITING: <span class="keyword">begin</span>
+                <span class="keyword">if</span> (mem_read_ready[i]) <span class="keyword">begin</span>
+                    mem_read_valid[i] &lt;= <span class="number">0</span>;
+                    consumer_read_ready[current_consumer[i]] &lt;= <span class="number">1</span>;
+                    consumer_read_data[current_consumer[i]] &lt;= mem_read_data[i];
+                    controller_state[i] &lt;= READ_RELAYING;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+            
+            READ_RELAYING: <span class="keyword">begin</span>
+                <span class="comment">// Wait for consumer to deassert valid</span>
+                <span class="keyword">if</span> (!consumer_read_valid[current_consumer[i]]) <span class="keyword">begin</span>
+                    channel_serving_consumer[current_consumer[i]] = <span class="number">0</span>;
+                    consumer_read_ready[current_consumer[i]] &lt;= <span class="number">0</span>;
+                    controller_state[i] &lt;= IDLE;
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+        <span class="keyword">endcase</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>18.4 GPU Module Integration</h2>
+
+        <p>The top-level gpu.sv wires everything together:</p>
+
+        <div class="file-header">src/gpu.sv (structure)</div>
+        <div class="code-block">
+<code><span class="keyword">module</span> <span class="type">gpu</span> #(
+    <span class="keyword">parameter</span> NUM_CORES = <span class="number">2</span>,
+    <span class="keyword">parameter</span> THREADS_PER_BLOCK = <span class="number">4</span>,
+    <span class="keyword">parameter</span> DATA_MEM_NUM_CHANNELS = <span class="number">4</span>,
+    <span class="keyword">parameter</span> PROGRAM_MEM_NUM_CHANNELS = <span class="number">1</span>
+    <span class="comment">// ... other parameters</span>
+) (
+    <span class="keyword">input</span> <span class="keyword">wire</span> clk, reset, start,
+    <span class="keyword">output</span> <span class="keyword">wire</span> done,
+    <span class="comment">// ... memory interfaces ...</span>
+);
+
+    <span class="comment">// Calculate total LSUs and fetchers</span>
+    <span class="keyword">localparam</span> NUM_LSUS = NUM_CORES * THREADS_PER_BLOCK;  <span class="comment">// 8</span>
+    <span class="keyword">localparam</span> NUM_FETCHERS = NUM_CORES;                   <span class="comment">// 2</span>
+
+    <span class="comment">// 1. Device Control Register (thread count)</span>
+    <span class="type">dcr</span> dcr_instance (...);
+
+    <span class="comment">// 2. Data Memory Controller (8 LSUs → 4 channels)</span>
+    <span class="type">controller</span> #(
+        .NUM_CONSUMERS(NUM_LSUS),      <span class="comment">// 8</span>
+        .NUM_CHANNELS(DATA_MEM_NUM_CHANNELS)  <span class="comment">// 4</span>
+    ) data_memory_controller (...);
+
+    <span class="comment">// 3. Program Memory Controller (2 fetchers → 1 channel)</span>
+    <span class="type">controller</span> #(
+        .NUM_CONSUMERS(NUM_FETCHERS),  <span class="comment">// 2</span>
+        .NUM_CHANNELS(PROGRAM_MEM_NUM_CHANNELS),  <span class="comment">// 1</span>
+        .WRITE_ENABLE(<span class="number">0</span>)              <span class="comment">// Read-only</span>
+    ) program_memory_controller (...);
+
+    <span class="comment">// 4. Dispatcher (manages core assignments)</span>
+    <span class="type">dispatch</span> #(
+        .NUM_CORES(NUM_CORES),
+        .THREADS_PER_BLOCK(THREADS_PER_BLOCK)
+    ) dispatch_instance (...);
+
+    <span class="comment">// 5. Generate cores</span>
+    <span class="keyword">genvar</span> i;
+    <span class="keyword">generate</span>
+        <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; NUM_CORES; i++) <span class="keyword">begin</span> : cores
+            <span class="type">core</span> core_instance (...);
+        <span class="keyword">end</span>
+    <span class="keyword">endgenerate</span>
+<span class="keyword">endmodule</span>
+</code>
+        </div>
+
+        <h2>18.5 Signal Routing</h2>
+
+        <p>Connecting LSUs to the memory controller requires careful signal routing:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Each core's LSUs need unique indices in the global LSU array</span>
+<span class="keyword">generate</span>
+    <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; NUM_CORES; i++) <span class="keyword">begin</span> : cores
+        <span class="comment">// Local signals for this core's LSUs</span>
+        <span class="keyword">reg</span> [THREADS_PER_BLOCK-1:0] core_lsu_read_valid;
+        <span class="keyword">reg</span> [7:0] core_lsu_read_address [THREADS_PER_BLOCK-1:0];
+        <span class="comment">// ...</span>
+
+        <span class="comment">// Map local LSU signals to global array</span>
+        <span class="keyword">for</span> (j = <span class="number">0</span>; j &lt; THREADS_PER_BLOCK; j++) <span class="keyword">begin</span>
+            <span class="keyword">localparam</span> lsu_index = i * THREADS_PER_BLOCK + j;
+            <span class="comment">// Core 0, Thread 2 → LSU index 2</span>
+            <span class="comment">// Core 1, Thread 2 → LSU index 6</span>
+            
+            <span class="keyword">always</span> @(<span class="keyword">posedge</span> clk) <span class="keyword">begin</span>
+                <span class="comment">// Core → Controller</span>
+                lsu_read_valid[lsu_index] &lt;= core_lsu_read_valid[j];
+                lsu_read_address[lsu_index] &lt;= core_lsu_read_address[j];
+                
+                <span class="comment">// Controller → Core</span>
+                core_lsu_read_ready[j] &lt;= lsu_read_ready[lsu_index];
+                core_lsu_read_data[j] &lt;= lsu_read_data[lsu_index];
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">endgenerate</span>
+</code>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ EDA Compatibility:</strong> The signal pass-through in gpu.sv exists because OpenLane (Verilog-2005) cannot slice arrays of arrays at the module boundary. This workaround registers signals between cores and controllers.
+        </div>
+
+        <h2>18.6 Scalability Analysis</h2>
+
+        <table>
+            <thead>
+                <tr><th>Configuration</th><th>Cores</th><th>Threads/Block</th><th>Total Parallel Threads</th><th>LSUs</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Minimal</td><td>1</td><td>4</td><td>4</td><td>4</td></tr>
+                <tr><td>Default</td><td>2</td><td>4</td><td>8</td><td>8</td></tr>
+                <tr><td>Expanded</td><td>4</td><td>8</td><td>32</td><td>32</td></tr>
+                <tr><td>Large</td><td>8</td><td>16</td><td>128</td><td>128</td></tr>
+            </tbody>
+        </table>
+
+        <div class="info-box">
+            <strong>💡 Bottleneck Consideration:</strong> With 128 LSUs sharing 4 data memory channels, memory bandwidth becomes the bottleneck. Real GPUs use caches and wider memory interfaces to mitigate this.
+        </div>
+
+        <h2>18.7 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 18.1: Calculate Block Count</h4>
+            <p>Given 37 threads and THREADS_PER_BLOCK = 8, how many blocks are needed? What's the thread count for the last block?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>total_blocks = (37 + 8 - 1) / 8 = 44 / 8 = 5 blocks</p>
+                    <p>Last block thread count = 37 - (4 * 8) = 37 - 32 = 5 threads</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 18.2: Memory Contention</h4>
+            <p>With 2 cores, 4 threads/block, and 4 memory channels, what's the worst-case scenario for memory access time if all threads issue loads simultaneously?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>8 LSUs competing for 4 channels = 2 rounds of serialization.</p>
+                    <p>Best case: 4 channels serve 4 requests immediately, then next 4.</p>
+                    <p>Worst case: All 8 requests arrive in same cycle, 4 wait while 4 are served.</p>
+                    <p>Total latency = 2× single memory access time.</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 18.3: Add Priority Scheduling</h4>
+            <p>The current controller uses first-come-first-served. Design a modification to give Core 0 priority over Core 1 for memory access. What signals would you add?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Add a priority encoder that sorts consumers by core ID:</p>
+<pre>
+// Instead of linear scan:
+for (int j = 0; j < NUM_CONSUMERS; j++) begin
+    // Check core 0's LSUs first (indices 0-3)
+    // Then core 1's LSUs (indices 4-7)
+    int priority_j = j; // Could reorder based on priority
+    if (consumer_read_valid[priority_j] && ...) begin
+</pre>
+                    <p>This favors lower-indexed consumers (Core 0's threads).</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>18.8 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🎯 Dispatcher = Block Scheduler:</strong> It assigns blocks to cores as they become available, handling variable thread counts for the last block.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔄 Memory Controller = Bandwidth Arbiter:</strong> Multiple consumers share limited channels through round-robin arbitration.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ Parallelism scales with cores:</strong> NUM_CORES × THREADS_PER_BLOCK = total parallel threads.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🏭 Generate blocks enable modularity:</strong> Cores are instantiated parametrically with proper signal routing.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-17.html">← Previous: GPU Core Design</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-19.html">Next →</a>
+            <a href="chapter-19.html">Next: Advanced RTL Techniques →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

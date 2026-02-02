@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appendix D: Simulation & Testing Guide - Tiny-GPU Architecture Guide</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <style>
+        .prereq-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        .prereq-card h3 {
+            margin-top: 0;
+            color: white;
+        }
+        .prereq-card a {
+            color: #ffeb3b;
+        }
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        .command-block {
+            background: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .command-block .header {
+            background: #333;
+            padding: 0.5rem 1rem;
+            color: #aaa;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .command-block pre {
+            margin: 0;
+            padding: 1rem;
+        }
+        .test-output {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 1rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-size: 0.85rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .file-tree {
+            font-family: 'Courier New', monospace;
+            background: var(--code-bg);
+            padding: 1rem;
+            border-radius: 4px;
+        }
+        .file-tree .dir { color: #569cd6; }
+        .file-tree .file { color: #d4d4d4; }
+        .file-tree .comment { color: #6a9955; }
+        .troubleshoot-card {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .troubleshoot-card h4 {
+            margin-top: 0;
+            color: #e65100;
+        }
+    </style>
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="appendix-c-module-reference.html" class="nav-link">← Prev: Appendix C</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Appendix D</div>
+        <h1>Simulation & Testing Guide</h1>
+        <p class="chapter-subtitle">Running and Debugging Tiny-GPU Simulations</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>Tiny-GPU uses a cocotb-based simulation environment that allows testing RTL designs with Python testbenches. This guide covers the complete workflow from setup to debugging.</p>
+            
+            <div class="mermaid">
+flowchart LR
+    subgraph TOOLS["Toolchain"]
+        SV[SystemVerilog<br/>src/*.sv]
+        SV2V[sv2v<br/>Converter]
+        VERILOG[Verilog-2005<br/>build/*.v]
+        IVERILOG[Icarus Verilog<br/>Simulator]
+        VVP[Simulation<br/>Executable]
+    end
+    
+    subgraph COCOTB["cocotb Framework"]
+        PYTHON[Python Tests<br/>test/*.py]
+        MEMORY[Memory Model<br/>helpers/memory.py]
+        LOGGER[Logger<br/>helpers/logger.py]
+    end
+    
+    SV --> SV2V --> VERILOG --> IVERILOG --> VVP
+    PYTHON --> VVP
+    MEMORY --> PYTHON
+    LOGGER --> PYTHON
+    
+    VVP --> RESULTS[Test Results]
+    VVP --> WAVES[Waveforms<br/>*.vcd]
+    VVP --> LOGS[Trace Logs<br/>test/logs/]
+            </div>
+        </section>
+
+        <section id="prerequisites">
+            <h2>Prerequisites</h2>
+            
+            <div class="prereq-card">
+                <h3>Required Tools</h3>
+                <ul>
+                    <li><strong>sv2v</strong> - SystemVerilog to Verilog converter: <a href="https://github.com/zachjs/sv2v" target="_blank">github.com/zachjs/sv2v</a></li>
+                    <li><strong>Icarus Verilog (iverilog)</strong> - Open-source Verilog simulator: <a href="https://steveicarus.github.io/iverilog/" target="_blank">steveicarus.github.io/iverilog</a></li>
+                    <li><strong>cocotb</strong> - Python-based verification framework: <a href="https://docs.cocotb.org/" target="_blank">docs.cocotb.org</a></li>
+                    <li><strong>Python 3.8+</strong> with pip</li>
+                    <li><strong>GTKWave</strong> (optional) - Waveform viewer for debugging</li>
+                </ul>
+            </div>
+
+            <h3>Installation Steps</h3>
+            
+            <h4><span class="step-number">1</span>Install sv2v</h4>
+            <div class="command-block">
+                <div class="header">Ubuntu/Debian</div>
+                <pre><code class="language-bash"># Using prebuilt binary
+wget https://github.com/zachjs/sv2v/releases/download/v0.0.11/sv2v-Linux.zip
+unzip sv2v-Linux.zip
+sudo mv sv2v /usr/local/bin/
+
+# Or build from source with Stack
+git clone https://github.com/zachjs/sv2v.git
+cd sv2v
+stack install</code></pre>
+            </div>
+            
+            <div class="command-block">
+                <div class="header">macOS</div>
+                <pre><code class="language-bash">brew install sv2v</code></pre>
+            </div>
+            
+            <h4><span class="step-number">2</span>Install Icarus Verilog</h4>
+            <div class="command-block">
+                <div class="header">Ubuntu/Debian</div>
+                <pre><code class="language-bash">sudo apt-get install iverilog</code></pre>
+            </div>
+            
+            <div class="command-block">
+                <div class="header">macOS</div>
+                <pre><code class="language-bash">brew install icarus-verilog</code></pre>
+            </div>
+            
+            <h4><span class="step-number">3</span>Install cocotb</h4>
+            <div class="command-block">
+                <div class="header">All platforms</div>
+                <pre><code class="language-bash">pip install cocotb cocotb-bus</code></pre>
+            </div>
+            
+            <h4><span class="step-number">4</span>Create build directory</h4>
+            <div class="command-block">
+                <div class="header">From project root</div>
+                <pre><code class="language-bash">mkdir -p build</code></pre>
+            </div>
+        </section>
+
+        <section id="project-structure">
+            <h2>Project Structure</h2>
+            
+            <div class="file-tree">
+<span class="dir">tiny-gpu/</span>
+├── <span class="dir">src/</span>                      <span class="comment"># RTL source files</span>
+│   ├── gpu.sv                 <span class="comment"># Top-level module</span>
+│   ├── core.sv                <span class="comment"># Processing core</span>
+│   ├── scheduler.sv           <span class="comment"># Core FSM</span>
+│   ├── ...                    <span class="comment"># Other modules</span>
+├── <span class="dir">test/</span>                     <span class="comment"># Test infrastructure</span>
+│   ├── test_matadd.py         <span class="comment"># Matrix addition test</span>
+│   ├── test_matmul.py         <span class="comment"># Matrix multiplication test</span>
+│   ├── <span class="dir">helpers/</span>              <span class="comment"># Test utilities</span>
+│   │   ├── memory.py          <span class="comment"># Memory model</span>
+│   │   ├── logger.py          <span class="comment"># Trace logging</span>
+│   │   ├── format.py          <span class="comment"># Output formatting</span>
+│   │   └── setup.py           <span class="comment"># Test setup helpers</span>
+│   └── <span class="dir">logs/</span>                 <span class="comment"># Generated trace files</span>
+├── <span class="dir">build/</span>                    <span class="comment"># Build artifacts (created)</span>
+│   ├── gpu.v                  <span class="comment"># Converted Verilog</span>
+│   └── sim.vvp                <span class="comment"># Simulation executable</span>
+├── Makefile                   <span class="comment"># Build automation</span>
+└── <span class="dir">docs/</span>                     <span class="comment"># Documentation</span>
+            </div>
+        </section>
+
+        <section id="running-tests">
+            <h2>Running Tests</h2>
+            
+            <h3>Available Test Targets</h3>
+            <p>The Makefile provides convenient targets for running the included tests:</p>
+            
+            <div class="command-block">
+                <div class="header">Matrix Addition Test</div>
+                <pre><code class="language-bash">make test_matadd</code></pre>
+            </div>
+            
+            <div class="command-block">
+                <div class="header">Matrix Multiplication Test</div>
+                <pre><code class="language-bash">make test_matmul</code></pre>
+            </div>
+            
+            <h3>Expected Output</h3>
+            <p>A successful test run looks like this:</p>
+            
+            <div class="test-output">$ make test_matadd
+sv2v -w build/gpu.v src/*.sv
+iverilog -o build/sim.vvp -s gpu -g2012 build/gpu.v
+MODULE=test_matadd TESTCASE=test_matadd vvp -M $(cocotb-config --lib-dir) \
+    -m $(cocotb-config --lib-name vpi icarus) build/sim.vvp
+
+     -.--ns INFO     cocotb.gpi          GPI_VERILOG         cocotb.gpi.vpi
+     -.--ns INFO     cocotb.gpi          Running on Icarus Verilog version 12.0
+     0.00ns INFO     cocotb.regression   Running test 1/1: test_matadd
+    
+    === TINY-GPU MATRIX ADDITION TEST ===
+    Configuration:
+      Matrix size: 4x4
+      Threads per block: 4
+      Number of blocks: 4
+    
+    Initial Memory:
+      Matrix A: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+      Matrix B: [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    
+    Running kernel...
+    Block 0 dispatched to core 0
+    Block 1 dispatched to core 1
+    Block 2 dispatched to core 0
+    Block 3 dispatched to core 1
+    Kernel complete!
+    
+    Result Matrix C:
+      [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]
+    
+    ✓ TEST PASSED: All elements correct!
+    
+   100.00ns INFO     cocotb.regression   test_matadd passed
+   100.00ns INFO     cocotb.regression   ************************************
+   100.00ns INFO     cocotb.regression   ** TEST                   STATUS **
+   100.00ns INFO     cocotb.regression   ************************************
+   100.00ns INFO     cocotb.regression   ** test_matadd             PASS   **
+   100.00ns INFO     cocotb.regression   ************************************</div>
+        </section>
+
+        <section id="test-architecture">
+            <h2>Test Architecture</h2>
+            
+            <h3>Memory Model</h3>
+            <p>The <code>test/helpers/memory.py</code> module provides a simulated memory that interfaces with the GPU's memory controller:</p>
+            
+            <pre><code class="language-python">class Memory:
+    """Simulated external memory for Tiny-GPU tests."""
+    
+    def __init__(self, size=256, data_width=8):
+        self.data = [0] * size
+        self.data_width = data_width
+    
+    def load(self, address):
+        """Read a value from memory."""
+        return self.data[address]
+    
+    def store(self, address, value):
+        """Write a value to memory."""
+        self.data[address] = value & ((1 << self.data_width) - 1)
+    
+    def load_matrix(self, base_addr, values):
+        """Load a matrix of values starting at base_addr."""
+        for i, val in enumerate(values):
+            self.store(base_addr + i, val)
+    
+    def read_matrix(self, base_addr, count):
+        """Read a matrix of values starting at base_addr."""
+        return [self.load(base_addr + i) for i in range(count)]</code></pre>
+            
+            <h3>Test Structure</h3>
+            <p>Each test file follows this pattern:</p>
+            
+            <pre><code class="language-python">import cocotb
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
+from helpers.memory import Memory
+from helpers.setup import setup_gpu
+
+@cocotb.test()
+async def test_matadd(dut):
+    """Test matrix addition kernel."""
+    
+    # 1. Create clock
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    
+    # 2. Initialize memory with test data
+    data_mem = Memory(size=256)
+    prog_mem = Memory(size=256)
+    
+    # Load matrices A and B
+    matrix_a = list(range(1, 17))   # [1, 2, ..., 16]
+    matrix_b = list(range(16, 0, -1))  # [16, 15, ..., 1]
+    data_mem.load_matrix(0, matrix_a)   # A at address 0
+    data_mem.load_matrix(16, matrix_b)  # B at address 16
+    
+    # 3. Load kernel program
+    kernel = [
+        0xB000,  # CONST R0, 0      (base A)
+        0xB110,  # CONST R1, 16     (base B)
+        0xB220,  # CONST R2, 32     (base C)
+        0x930F,  # LDR R3, R0, R15  (load A[tid])
+        0x941F,  # LDR R4, R1, R15  (load B[tid])
+        0x0534,  # ADD R5, R3, R4   (add)
+        0xA52F,  # STR R5, R2, R15  (store C[tid])
+        0xD000,  # RET
+    ]
+    prog_mem.load_matrix(0, kernel)
+    
+    # 4. Configure and start GPU
+    await setup_gpu(dut, num_blocks=4, start_pc=0)
+    
+    # 5. Run simulation with memory interface
+    await run_with_memory(dut, data_mem, prog_mem)
+    
+    # 6. Verify results
+    result = data_mem.read_matrix(32, 16)
+    expected = [a + b for a, b in zip(matrix_a, matrix_b)]
+    assert result == expected, f"Mismatch: {result} != {expected}"</code></pre>
+        </section>
+
+        <section id="writing-kernels">
+            <h2>Writing Test Kernels</h2>
+            
+            <p>Kernels are encoded as 16-bit instruction words. Use the following process:</p>
+            
+            <h3>Step 1: Write Assembly</h3>
+            <pre><code class="language-asm">; Matrix addition kernel: C[i] = A[i] + B[i]
+; Assumes:
+;   A starts at address 0
+;   B starts at address 16
+;   C starts at address 32
+;   Global thread ID = blockIdx * blockDim + threadIdx
+
+        CONST R0, 0         ; R0 = base address of A
+        CONST R1, 16        ; R1 = base address of B
+        CONST R2, 32        ; R2 = base address of C
+        
+        ; Compute global thread ID
+        MUL   R6, R13, R14  ; R6 = blockIdx * blockDim
+        ADD   R6, R6, R15   ; R6 = R6 + threadIdx (global ID)
+        
+        ; Load operands
+        LDR   R3, R0, R6    ; R3 = A[global_id]
+        LDR   R4, R1, R6    ; R4 = B[global_id]
+        
+        ; Compute and store
+        ADD   R5, R3, R4    ; R5 = R3 + R4
+        STR   R5, R2, R6    ; C[global_id] = R5
+        
+        RET                 ; Done</code></pre>
+            
+            <h3>Step 2: Encode to Hex</h3>
+            <p>Use the encoding rules from Appendix B:</p>
+            
+            <table class="port-table">
+                <thead>
+                    <tr><th>Instruction</th><th>Format</th><th>Binary</th><th>Hex</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>CONST R0, 0</td><td>I-Type</td><td>1011 0000 0000 0000</td><td>0xB000</td></tr>
+                    <tr><td>CONST R1, 16</td><td>I-Type</td><td>1011 0001 0001 0000</td><td>0xB110</td></tr>
+                    <tr><td>CONST R2, 32</td><td>I-Type</td><td>1011 0010 0010 0000</td><td>0xB220</td></tr>
+                    <tr><td>MUL R6, R13, R14</td><td>R-Type</td><td>0010 0110 1101 1110</td><td>0x26DE</td></tr>
+                    <tr><td>ADD R6, R6, R15</td><td>R-Type</td><td>0000 0110 0110 1111</td><td>0x066F</td></tr>
+                    <tr><td>LDR R3, R0, R6</td><td>R-Type</td><td>1001 0011 0000 0110</td><td>0x9306</td></tr>
+                    <tr><td>LDR R4, R1, R6</td><td>R-Type</td><td>1001 0100 0001 0110</td><td>0x9416</td></tr>
+                    <tr><td>ADD R5, R3, R4</td><td>R-Type</td><td>0000 0101 0011 0100</td><td>0x0534</td></tr>
+                    <tr><td>STR R5, R2, R6</td><td>R-Type</td><td>1010 0101 0010 0110</td><td>0xA526</td></tr>
+                    <tr><td>RET</td><td>Special</td><td>1101 0000 0000 0000</td><td>0xD000</td></tr>
+                </tbody>
+            </table>
+            
+            <h3>Step 3: Load in Test</h3>
+            <pre><code class="language-python">kernel = [
+    0xB000,  # CONST R0, 0
+    0xB110,  # CONST R1, 16
+    0xB220,  # CONST R2, 32
+    0x26DE,  # MUL R6, R13, R14
+    0x066F,  # ADD R6, R6, R15
+    0x9306,  # LDR R3, R0, R6
+    0x9416,  # LDR R4, R1, R6
+    0x0534,  # ADD R5, R3, R4
+    0xA526,  # STR R5, R2, R6
+    0xD000,  # RET
+]
+prog_mem.load_matrix(0, kernel)</code></pre>
+        </section>
+
+        <section id="debugging">
+            <h2>Debugging Techniques</h2>
+            
+            <h3>Generating Waveforms</h3>
+            <p>Add waveform dumping to capture signal traces:</p>
+            
+            <div class="command-block">
+                <div class="header">In your test file</div>
+                <pre><code class="language-python">@cocotb.test()
+async def test_with_waves(dut):
+    # Enable VCD waveform dump
+    import cocotb.wavedrom
+    
+    # ... rest of test ...</code></pre>
+            </div>
+            
+            <p>Or modify the Makefile to include waveform generation:</p>
+            
+            <div class="command-block">
+                <div class="header">Makefile addition</div>
+                <pre><code class="language-makefile">WAVES ?= 1
+ifeq ($(WAVES),1)
+    COMPILE_ARGS += -DWAVES
+    SIM_ARGS += +dumpfile=waves.vcd
+endif</code></pre>
+            </div>
+            
+            <p>View with GTKWave:</p>
+            <div class="command-block">
+                <div class="header">Terminal</div>
+                <pre><code class="language-bash">gtkwave waves.vcd</code></pre>
+            </div>
+            
+            <h3>Trace Logging</h3>
+            <p>The test framework includes a logger for capturing execution traces:</p>
+            
+            <pre><code class="language-python">from helpers.logger import TraceLogger
+
+logger = TraceLogger("test/logs/matadd.log")
+
+# Log memory operations
+logger.log_memory_read(core_id=0, thread_id=0, address=0, data=42)
+logger.log_memory_write(core_id=0, thread_id=0, address=32, data=17)
+
+# Log instruction execution
+logger.log_instruction(core_id=0, pc=0, opcode="ADD", rd=5, rs1=3, rs2=4)
+
+# Log state transitions
+logger.log_state(core_id=0, old_state="FETCH", new_state="DECODE")</code></pre>
+            
+            <h3>Interactive Debugging</h3>
+            <p>Use cocotb's Python REPL for interactive debugging:</p>
+            
+            <pre><code class="language-python">@cocotb.test()
+async def test_debug(dut):
+    # ... setup ...
+    
+    # Pause and inspect
+    await Timer(50, units="ns")
+    
+    # Print signal values
+    print(f"PC: {dut.core0.pc.value}")
+    print(f"State: {dut.core0.scheduler.state.value}")
+    print(f"Instruction: {hex(dut.core0.instruction.value)}")
+    
+    # Breakpoint-style debugging
+    import pdb; pdb.set_trace()</code></pre>
+        </section>
+
+        <section id="common-issues">
+            <h2>Troubleshooting</h2>
+            
+            <div class="troubleshoot-card">
+                <h4>Error: sv2v not found</h4>
+                <p><strong>Cause:</strong> sv2v is not installed or not in PATH.</p>
+                <p><strong>Solution:</strong> Install sv2v and ensure it's in your PATH:</p>
+                <pre><code class="language-bash">which sv2v  # Should show path
+# If not found, add to PATH:
+export PATH=$PATH:/path/to/sv2v</code></pre>
+            </div>
+            
+            <div class="troubleshoot-card">
+                <h4>Error: Cannot find module 'gpu'</h4>
+                <p><strong>Cause:</strong> Build directory doesn't exist or conversion failed.</p>
+                <p><strong>Solution:</strong></p>
+                <pre><code class="language-bash">mkdir -p build
+sv2v -w build/gpu.v src/*.sv
+# Check for conversion errors in output</code></pre>
+            </div>
+            
+            <div class="troubleshoot-card">
+                <h4>Test hangs indefinitely</h4>
+                <p><strong>Cause:</strong> Missing clock, infinite loop in kernel, or memory deadlock.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Ensure clock is started: <code>cocotb.start_soon(clock.start())</code></li>
+                    <li>Check kernel has RET instruction</li>
+                    <li>Verify memory handshaking in test harness</li>
+                    <li>Add timeout: <code>await with_timeout(run_kernel(), timeout=1000, units="ns")</code></li>
+                </ul>
+            </div>
+            
+            <div class="troubleshoot-card">
+                <h4>Wrong computation results</h4>
+                <p><strong>Cause:</strong> Incorrect kernel encoding or memory addressing.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Double-check instruction encoding against Appendix B</li>
+                    <li>Verify base addresses in CONST instructions</li>
+                    <li>Check that threadIdx/blockIdx are used correctly</li>
+                    <li>Enable trace logging to see per-thread behavior</li>
+                </ul>
+            </div>
+            
+            <div class="troubleshoot-card">
+                <h4>Icarus Verilog syntax errors</h4>
+                <p><strong>Cause:</strong> sv2v didn't convert all SystemVerilog constructs.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Update sv2v to latest version</li>
+                    <li>Check for unsupported constructs in source</li>
+                    <li>Use <code>-g2012</code> flag with iverilog for SystemVerilog-2012 support</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="makefile-reference">
+            <h2>Makefile Reference</h2>
+            
+            <p>Key targets available in the project Makefile:</p>
+            
+            <table class="port-table">
+                <thead>
+                    <tr><th>Target</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>make test_matadd</code></td><td>Run matrix addition test</td></tr>
+                    <tr><td><code>make test_matmul</code></td><td>Run matrix multiplication test</td></tr>
+                    <tr><td><code>make build</code></td><td>Convert SV to Verilog and compile</td></tr>
+                    <tr><td><code>make clean</code></td><td>Remove build artifacts</td></tr>
+                    <tr><td><code>make waves</code></td><td>Generate waveform VCD file</td></tr>
+                </tbody>
+            </table>
+            
+            <h3>Makefile Variables</h3>
+            <pre><code class="language-makefile"># Key variables
+SRC_DIR     = src
+BUILD_DIR   = build
+TEST_DIR    = test
+TOP_MODULE  = gpu
+
+# Toolchain
+SV2V        = sv2v
+IVERILOG    = iverilog
+VVP         = vvp
+
+# cocotb settings
+export COCOTB_REDUCED_LOG_FMT = 1
+export PYTHONPATH := $(PWD)/test:$(PYTHONPATH)</code></pre>
+        </section>
+
+        <section id="extending-tests">
+            <h2>Writing New Tests</h2>
+            
+            <p>To add a new test kernel:</p>
+            
+            <h3>1. Create Test File</h3>
+            <pre><code class="language-python"># test/test_mykernel.py
+import cocotb
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
+from helpers.memory import Memory
+from helpers.setup import setup_gpu, run_with_memory
+
+@cocotb.test()
+async def test_mykernel(dut):
+    """Test my custom kernel."""
+    
+    # Setup clock
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    
+    # Initialize memories
+    data_mem = Memory(size=256)
+    prog_mem = Memory(size=256)
+    
+    # TODO: Load your test data
+    # data_mem.load_matrix(0, [...])
+    
+    # TODO: Load your kernel
+    kernel = [
+        # Your encoded instructions
+        0xD000,  # RET (at minimum)
+    ]
+    prog_mem.load_matrix(0, kernel)
+    
+    # Configure GPU
+    await setup_gpu(dut, num_blocks=4, start_pc=0)
+    
+    # Run
+    await run_with_memory(dut, data_mem, prog_mem)
+    
+    # TODO: Verify results
+    # result = data_mem.read_matrix(base, count)
+    # assert result == expected</code></pre>
+            
+            <h3>2. Add Makefile Target</h3>
+            <pre><code class="language-makefile"># Add to Makefile
+test_mykernel: $(BUILD_DIR)/sim.vvp
+	MODULE=test_mykernel TESTCASE=test_mykernel \
+	    $(VVP) -M $$(cocotb-config --lib-dir) \
+	    -m $$(cocotb-config --lib-name vpi icarus) $<</code></pre>
+            
+            <h3>3. Run Your Test</h3>
+            <div class="command-block">
+                <div class="header">Terminal</div>
+                <pre><code class="language-bash">make test_mykernel</code></pre>
+            </div>
+        </section>
+
+        <section id="ci-integration">
+            <h2>CI/CD Integration</h2>
+            
+            <p>Example GitHub Actions workflow for automated testing:</p>
+            
+            <pre><code class="language-yaml"># .github/workflows/test.yml
+name: RTL Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y iverilog
+        pip install cocotb cocotb-bus
+        
+        # Install sv2v
+        wget https://github.com/zachjs/sv2v/releases/latest/download/sv2v-Linux.zip
+        unzip sv2v-Linux.zip
+        sudo mv sv2v /usr/local/bin/
+    
+    - name: Create build directory
+      run: mkdir -p build
+    
+    - name: Run matrix addition test
+      run: make test_matadd
+    
+    - name: Run matrix multiplication test
+      run: make test_matmul
+    
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-logs
+        path: test/logs/</code></pre>
+        </section>
+
+        <section id="resources">
+            <h2>Additional Resources</h2>
+            
+            <h3>Documentation</h3>
+            <ul>
+                <li><a href="https://docs.cocotb.org/en/stable/" target="_blank">cocotb Documentation</a> - Full framework reference</li>
+                <li><a href="https://steveicarus.github.io/iverilog/" target="_blank">Icarus Verilog Manual</a> - Simulator documentation</li>
+                <li><a href="https://github.com/zachjs/sv2v" target="_blank">sv2v GitHub</a> - Converter documentation</li>
+            </ul>
+            
+            <h3>Related GPU Projects</h3>
+            <ul>
+                <li><a href="https://github.com/VerticalResearchGroup/miaow" target="_blank">MIAOW GPU</a> - OpenCL-compatible open-source GPU</li>
+                <li><a href="https://github.com/hughperkins/VeriGPU" target="_blank">VeriGPU</a> - Another educational GPU implementation</li>
+            </ul>
+            
+            <h3>Learning Resources</h3>
+            <ul>
+                <li><a href="https://www.chipverify.com/cocotb/cocotb-tutorial" target="_blank">cocotb Tutorial</a> - Step-by-step introduction</li>
+                <li><a href="http://fpgacpu.ca/fpga/index.html" target="_blank">FPGA CPU Design</a> - Related architecture concepts</li>
+            </ul>
+        </section>
+    </main>
+
+    <nav class="chapter-nav bottom-nav">
+        <a href="appendix-c-module-reference.html" class="nav-link">← Prev: Appendix C</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+    </nav>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'neutral',
+            flowchart: { useMaxWidth: true, htmlLabels: true }
+        });
+    </script>
+</body>
+</html>

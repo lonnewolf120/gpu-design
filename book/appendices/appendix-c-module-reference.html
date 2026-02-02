@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appendix C: Module Reference - Tiny-GPU Architecture Guide</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <style>
+        .module-card {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .module-card h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-family: 'Courier New', monospace;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .module-card h3 .file-path {
+            font-size: 0.875rem;
+            color: var(--secondary-color);
+            font-weight: normal;
+        }
+        .port-table {
+            width: 100%;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        .port-table th {
+            background: var(--primary-color);
+            color: white;
+            text-align: left;
+        }
+        .port-table td, .port-table th {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-color);
+        }
+        .port-table .dir-in { color: #4caf50; }
+        .port-table .dir-out { color: #ff9800; }
+        .port-table .dir-inout { color: #9c27b0; }
+        .port-table code {
+            background: rgba(0,0,0,0.2);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+        }
+        .param-table th {
+            background: var(--secondary-color);
+        }
+        .hierarchy-box {
+            background: #1e1e1e;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .module-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .module-summary div {
+            background: var(--background-color);
+            padding: 0.75rem;
+            border-radius: 4px;
+        }
+        .module-summary label {
+            font-weight: bold;
+            color: var(--secondary-color);
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="chapter-nav">
+        <a href="appendix-b-instruction-reference.html" class="nav-link">← Prev: Appendix B</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-d-simulation-guide.html" class="nav-link">Next: Appendix D →</a>
+    </nav>
+
+    <header class="chapter-header">
+        <div class="chapter-label">Appendix C</div>
+        <h1>RTL Module Reference</h1>
+        <p class="chapter-subtitle">SystemVerilog Module Documentation</p>
+    </header>
+
+    <main class="chapter-content">
+        <section id="overview">
+            <h2>Module Hierarchy</h2>
+            <p>The Tiny-GPU design consists of interconnected SystemVerilog modules. This appendix documents each module's interface, parameters, and functionality.</p>
+            
+            <div class="mermaid">
+flowchart TB
+    subgraph TOP["gpu.sv (Top Level)"]
+        DCR["dcr.sv<br/>Device Config"]
+        DISPATCH["dispatch.sv<br/>Block Dispatcher"]
+        CTRL_D["controller.sv<br/>Data Memory Controller"]
+        CTRL_P["controller.sv<br/>Program Memory Controller"]
+        
+        subgraph CORES["Core Instances"]
+            CORE0["core.sv<br/>Core 0"]
+            CORE1["core.sv<br/>Core 1"]
+            COREN["core.sv<br/>Core N-1"]
+        end
+    end
+    
+    DCR --> DISPATCH
+    DISPATCH --> CORES
+    CORES <--> CTRL_D
+    CORES <--> CTRL_P
+    
+    subgraph CORE_INTERNAL["Inside core.sv"]
+        SCHED["scheduler.sv"]
+        FETCH["fetcher.sv"]
+        DEC["decoder.sv"]
+        
+        subgraph PER_THREAD["Per-Thread Resources"]
+            ALU["alu.sv"]
+            LSU["lsu.sv"]
+            PC["pc.sv"]
+            REG["registers.sv"]
+        end
+    end
+            </div>
+        </section>
+
+        <section id="parameters">
+            <h2>Global Parameters</h2>
+            <p>Key compile-time parameters that configure the GPU:</p>
+            
+            <table class="port-table param-table">
+                <thead>
+                    <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>DATA_WIDTH</code></td><td>8</td><td>Width of data words in bits</td></tr>
+                    <tr><td><code>ADDR_WIDTH</code></td><td>8</td><td>Width of memory addresses in bits</td></tr>
+                    <tr><td><code>INSTR_WIDTH</code></td><td>16</td><td>Width of instructions in bits</td></tr>
+                    <tr><td><code>NUM_CORES</code></td><td>2</td><td>Number of parallel cores</td></tr>
+                    <tr><td><code>THREADS_PER_BLOCK</code></td><td>4</td><td>Threads per block (per core)</td></tr>
+                    <tr><td><code>NUM_REGS</code></td><td>16</td><td>Registers per thread (R0–R15)</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- GPU Module -->
+        <section id="gpu">
+            <h2>gpu.sv — Top-Level GPU</h2>
+            
+            <div class="module-card">
+                <h3>module gpu <span class="file-path">src/gpu.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Top-level module integrating all components</div>
+                    <div><label>Instantiates</label>dcr, dispatch, controller (×2), core (×N)</div>
+                    <div><label>Parameters</label>NUM_CORES, DATA_WIDTH, ADDR_WIDTH</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Synchronous reset (active high)</td></tr>
+                        <tr><td><code>start</code></td><td class="dir-in">in</td><td>1</td><td>Kernel launch signal</td></tr>
+                        <tr><td><code>done</code></td><td class="dir-out">out</td><td>1</td><td>Kernel completion signal</td></tr>
+                        <tr><td><code>device_control</code></td><td class="dir-in">in</td><td>varies</td><td>DCR configuration input</td></tr>
+                        <tr><td><code>data_mem_*</code></td><td class="dir-inout">i/o</td><td>varies</td><td>Data memory interface signals</td></tr>
+                        <tr><td><code>program_mem_*</code></td><td class="dir-inout">i/o</td><td>varies</td><td>Program memory interface signals</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Architecture Notes</h4>
+                <ul>
+                    <li>Avoids top-level array port slicing for OpenLane/Verilog-2005 compatibility</li>
+                    <li>Wires DCR outputs to dispatch, dispatch outputs to cores</li>
+                    <li>Two controller instances: one for program memory, one for data memory</li>
+                    <li>Generates <code>NUM_CORES</code> core instances in a generate block</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- DCR Module -->
+        <section id="dcr">
+            <h2>dcr.sv — Device Configuration Register</h2>
+            
+            <div class="module-card">
+                <h3>module dcr <span class="file-path">src/dcr.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Stores kernel launch configuration</div>
+                    <div><label>Key Registers</label>device_pc, num_blocks, start, done</div>
+                    <div><label>Instantiated By</label>gpu.sv</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Synchronous reset</td></tr>
+                        <tr><td><code>start</code></td><td class="dir-in">in</td><td>1</td><td>External kernel launch signal</td></tr>
+                        <tr><td><code>device_control</code></td><td class="dir-in">in</td><td>varies</td><td>Packed configuration data</td></tr>
+                        <tr><td><code>device_pc</code></td><td class="dir-out">out</td><td>ADDR_WIDTH</td><td>Starting program counter</td></tr>
+                        <tr><td><code>num_blocks</code></td><td class="dir-out">out</td><td>varies</td><td>Total blocks to launch</td></tr>
+                        <tr><td><code>kernel_start</code></td><td class="dir-out">out</td><td>1</td><td>Pulse to dispatcher</td></tr>
+                        <tr><td><code>kernel_done</code></td><td class="dir-in">in</td><td>1</td><td>Completion signal from dispatcher</td></tr>
+                        <tr><td><code>done</code></td><td class="dir-out">out</td><td>1</td><td>External completion output</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Functionality</h4>
+                <ul>
+                    <li>Parses device_control into device_pc and num_blocks</li>
+                    <li>Generates kernel_start pulse on rising edge of start</li>
+                    <li>Latches done when kernel_done received</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Dispatch Module -->
+        <section id="dispatch">
+            <h2>dispatch.sv — Block Dispatcher</h2>
+            
+            <div class="module-card">
+                <h3>module dispatch <span class="file-path">src/dispatch.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Assigns thread blocks to available cores</div>
+                    <div><label>State Machine</label>IDLE → DISPATCHING → WAITING → DONE</div>
+                    <div><label>Instantiated By</label>gpu.sv</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Synchronous reset</td></tr>
+                        <tr><td><code>kernel_start</code></td><td class="dir-in">in</td><td>1</td><td>Start dispatch process</td></tr>
+                        <tr><td><code>device_pc</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Program start address</td></tr>
+                        <tr><td><code>num_blocks</code></td><td class="dir-in">in</td><td>varies</td><td>Total blocks to dispatch</td></tr>
+                        <tr><td><code>core_ready</code></td><td class="dir-in">in</td><td>NUM_CORES</td><td>Core availability flags</td></tr>
+                        <tr><td><code>core_start</code></td><td class="dir-out">out</td><td>NUM_CORES</td><td>Per-core start signals</td></tr>
+                        <tr><td><code>core_block_id</code></td><td class="dir-out">out</td><td>NUM_CORES×W</td><td>Block ID for each core</td></tr>
+                        <tr><td><code>core_pc</code></td><td class="dir-out">out</td><td>NUM_CORES×ADDR</td><td>PC for each core</td></tr>
+                        <tr><td><code>kernel_done</code></td><td class="dir-out">out</td><td>1</td><td>All blocks complete</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Dispatch Algorithm</h4>
+                <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> DISPATCHING: kernel_start
+    DISPATCHING --> DISPATCHING: blocks_remaining > 0 && core_ready
+    DISPATCHING --> WAITING: blocks_remaining == 0
+    WAITING --> WAITING: cores_busy > 0
+    WAITING --> DONE: all cores idle
+    DONE --> IDLE: reset or new kernel
+                </div>
+            </div>
+        </section>
+
+        <!-- Core Module -->
+        <section id="core">
+            <h2>core.sv — Processing Core</h2>
+            
+            <div class="module-card">
+                <h3>module core <span class="file-path">src/core.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Executes one thread block</div>
+                    <div><label>Resources</label>THREADS_PER_BLOCK ALUs, LSUs, PCs, register files</div>
+                    <div><label>Instantiates</label>scheduler, fetcher, decoder, alu, lsu, pc, registers</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Synchronous reset</td></tr>
+                        <tr><td><code>start</code></td><td class="dir-in">in</td><td>1</td><td>Block execution start</td></tr>
+                        <tr><td><code>block_id</code></td><td class="dir-in">in</td><td>varies</td><td>Assigned block index</td></tr>
+                        <tr><td><code>initial_pc</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Starting program counter</td></tr>
+                        <tr><td><code>ready</code></td><td class="dir-out">out</td><td>1</td><td>Core available for work</td></tr>
+                        <tr><td><code>done</code></td><td class="dir-out">out</td><td>1</td><td>Block execution complete</td></tr>
+                        <tr><td><code>prog_mem_*</code></td><td class="dir-inout">i/o</td><td>varies</td><td>Program memory channel</td></tr>
+                        <tr><td><code>data_mem_*</code></td><td class="dir-inout">i/o</td><td>varies</td><td>Data memory channel (per thread)</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Internal Structure</h4>
+                <div class="mermaid">
+flowchart TB
+    subgraph CORE["core.sv"]
+        START([start signal])
+        SCHED[scheduler.sv<br/>FSM Control]
+        FETCH[fetcher.sv<br/>Instruction Fetch]
+        DEC[decoder.sv<br/>Instruction Decode]
+        
+        subgraph THREADS["Thread Resources (×THREADS_PER_BLOCK)"]
+            direction LR
+            PC0[pc.sv]
+            REG0[registers.sv]
+            ALU0[alu.sv]
+            LSU0[lsu.sv]
+        end
+        
+        START --> SCHED
+        SCHED --> FETCH
+        FETCH --> DEC
+        DEC --> THREADS
+        SCHED --> THREADS
+    end
+                </div>
+            </div>
+        </section>
+
+        <!-- Scheduler Module -->
+        <section id="scheduler">
+            <h2>scheduler.sv — Core FSM</h2>
+            
+            <div class="module-card">
+                <h3>module scheduler <span class="file-path">src/scheduler.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Sequences pipeline stages within a core</div>
+                    <div><label>FSM States</label>IDLE, FETCH, DECODE, REQUEST, WAIT, EXECUTE, UPDATE</div>
+                    <div><label>Instantiated By</label>core.sv</div>
+                </div>
+                
+                <h4>State Machine</h4>
+                <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> FETCH: start
+    FETCH --> DECODE: instruction_ready
+    DECODE --> REQUEST: decoded
+    REQUEST --> WAIT: memory_request_sent
+    WAIT --> EXECUTE: memory_response_ready
+    EXECUTE --> UPDATE: operation_complete
+    UPDATE --> FETCH: !is_ret
+    UPDATE --> IDLE: is_ret (done)
+    
+    note right of FETCH: Read instruction at PC
+    note right of DECODE: Parse opcode, operands
+    note right of REQUEST: Send LDR/STR request
+    note right of WAIT: Wait for memory
+    note right of EXECUTE: Perform ALU operation
+    note right of UPDATE: Writeback, update PC
+                </div>
+                
+                <h4>Key Signals</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Signal</th><th>Dir</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>state</code></td><td class="dir-out">out</td><td>Current FSM state</td></tr>
+                        <tr><td><code>fetcher_enable</code></td><td class="dir-out">out</td><td>Enable instruction fetch</td></tr>
+                        <tr><td><code>decode_enable</code></td><td class="dir-out">out</td><td>Enable instruction decode</td></tr>
+                        <tr><td><code>execute_enable</code></td><td class="dir-out">out</td><td>Enable ALU/LSU execution</td></tr>
+                        <tr><td><code>writeback_enable</code></td><td class="dir-out">out</td><td>Enable register writeback</td></tr>
+                        <tr><td><code>pc_update_enable</code></td><td class="dir-out">out</td><td>Enable PC update</td></tr>
+                    </tbody>
+                </table>
+                
+                <div class="warning-box">
+                    <p><strong>Design Note:</strong> Tiny-GPU does <em>not</em> handle branch divergence. The next PC is taken from a single representative thread (index 0). All threads must follow the same control flow path.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Fetcher Module -->
+        <section id="fetcher">
+            <h2>fetcher.sv — Instruction Fetch</h2>
+            
+            <div class="module-card">
+                <h3>module fetcher <span class="file-path">src/fetcher.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Retrieves instructions from program memory</div>
+                    <div><label>Protocol</label>Request/response handshake</div>
+                    <div><label>Instantiated By</label>core.sv</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>enable</code></td><td class="dir-in">in</td><td>1</td><td>Fetch enable from scheduler</td></tr>
+                        <tr><td><code>pc</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Address to fetch</td></tr>
+                        <tr><td><code>instruction</code></td><td class="dir-out">out</td><td>INSTR_WIDTH</td><td>Fetched instruction</td></tr>
+                        <tr><td><code>valid</code></td><td class="dir-out">out</td><td>1</td><td>Instruction valid flag</td></tr>
+                        <tr><td><code>mem_read_address</code></td><td class="dir-out">out</td><td>ADDR_WIDTH</td><td>Memory request address</td></tr>
+                        <tr><td><code>mem_read_valid</code></td><td class="dir-out">out</td><td>1</td><td>Memory request valid</td></tr>
+                        <tr><td><code>mem_read_data</code></td><td class="dir-in">in</td><td>INSTR_WIDTH</td><td>Memory response data</td></tr>
+                        <tr><td><code>mem_read_ready</code></td><td class="dir-in">in</td><td>1</td><td>Memory response valid</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Decoder Module -->
+        <section id="decoder">
+            <h2>decoder.sv — Instruction Decoder</h2>
+            
+            <div class="module-card">
+                <h3>module decoder <span class="file-path">src/decoder.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Parses instruction bits into control signals</div>
+                    <div><label>Opcodes</label>11 instructions (ADD, SUB, MUL, DIV, AND, OR, NOT, XOR, CMP, LDR, STR, CONST, BRnzp, RET)</div>
+                    <div><label>Instantiated By</label>core.sv</div>
+                </div>
+                
+                <h4>Output Signals</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>opcode</code></td><td>4</td><td>Operation code (0–13)</td></tr>
+                        <tr><td><code>rd</code></td><td>4</td><td>Destination register</td></tr>
+                        <tr><td><code>rs1</code></td><td>4</td><td>Source register 1</td></tr>
+                        <tr><td><code>rs2</code></td><td>4</td><td>Source register 2</td></tr>
+                        <tr><td><code>immediate</code></td><td>8</td><td>Immediate value (I-type)</td></tr>
+                        <tr><td><code>nzp</code></td><td>3</td><td>Branch condition flags</td></tr>
+                        <tr><td><code>pc_offset</code></td><td>9</td><td>Branch offset (signed)</td></tr>
+                        <tr><td><code>is_alu_op</code></td><td>1</td><td>ALU operation flag</td></tr>
+                        <tr><td><code>is_mem_op</code></td><td>1</td><td>Memory operation flag</td></tr>
+                        <tr><td><code>is_load</code></td><td>1</td><td>Load operation</td></tr>
+                        <tr><td><code>is_store</code></td><td>1</td><td>Store operation</td></tr>
+                        <tr><td><code>is_branch</code></td><td>1</td><td>Branch instruction</td></tr>
+                        <tr><td><code>is_ret</code></td><td>1</td><td>Return instruction</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Instruction Bit Layout</h4>
+                <pre><code class="language-verilog">// R-Type: [15:12]=opcode, [11:8]=rd, [7:4]=rs1, [3:0]=rs2
+// I-Type: [15:12]=opcode, [11:8]=rd, [7:0]=immediate
+// B-Type: [15:12]=opcode, [11:9]=nzp, [8:0]=pc_offset
+
+wire [3:0] opcode = instruction[15:12];
+wire [3:0] rd     = instruction[11:8];
+wire [3:0] rs1    = instruction[7:4];
+wire [3:0] rs2    = instruction[3:0];
+wire [7:0] imm    = instruction[7:0];
+wire [2:0] nzp    = instruction[11:9];
+wire [8:0] offset = instruction[8:0];</code></pre>
+            </div>
+        </section>
+
+        <!-- ALU Module -->
+        <section id="alu">
+            <h2>alu.sv — Arithmetic Logic Unit</h2>
+            
+            <div class="module-card">
+                <h3>module alu <span class="file-path">src/alu.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Performs arithmetic and logical operations</div>
+                    <div><label>Operations</label>ADD, SUB, MUL, DIV, AND, OR, NOT, XOR, CMP</div>
+                    <div><label>Instance Count</label>THREADS_PER_BLOCK per core</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>opcode</code></td><td class="dir-in">in</td><td>4</td><td>Operation selector</td></tr>
+                        <tr><td><code>operand_a</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>First operand (RS1)</td></tr>
+                        <tr><td><code>operand_b</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Second operand (RS2)</td></tr>
+                        <tr><td><code>result</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>Operation result</td></tr>
+                        <tr><td><code>nzp_out</code></td><td class="dir-out">out</td><td>3</td><td>Condition flags {N,Z,P}</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Operation Table</h4>
+                <pre><code class="language-verilog">always_comb begin
+    case (opcode)
+        4'h0: result = operand_a + operand_b;    // ADD
+        4'h1: result = operand_a - operand_b;    // SUB
+        4'h2: result = operand_a * operand_b;    // MUL
+        4'h3: result = operand_a / operand_b;    // DIV
+        4'h4: result = operand_a & operand_b;    // AND
+        4'h5: result = operand_a | operand_b;    // OR
+        4'h6: result = ~operand_a;               // NOT
+        4'h7: result = operand_a ^ operand_b;    // XOR
+        4'h8: result = operand_a - operand_b;    // CMP (sets flags)
+        default: result = 0;
+    endcase
+end</code></pre>
+            </div>
+        </section>
+
+        <!-- LSU Module -->
+        <section id="lsu">
+            <h2>lsu.sv — Load/Store Unit</h2>
+            
+            <div class="module-card">
+                <h3>module lsu <span class="file-path">src/lsu.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Handles data memory load/store operations</div>
+                    <div><label>Operations</label>LDR (load), STR (store)</div>
+                    <div><label>Instance Count</label>THREADS_PER_BLOCK per core</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>enable</code></td><td class="dir-in">in</td><td>1</td><td>Operation enable</td></tr>
+                        <tr><td><code>is_load</code></td><td class="dir-in">in</td><td>1</td><td>Load operation select</td></tr>
+                        <tr><td><code>is_store</code></td><td class="dir-in">in</td><td>1</td><td>Store operation select</td></tr>
+                        <tr><td><code>base_addr</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Base address (RS1)</td></tr>
+                        <tr><td><code>offset</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Offset (RS2)</td></tr>
+                        <tr><td><code>store_data</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Data to store (RD)</td></tr>
+                        <tr><td><code>load_data</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>Loaded data</td></tr>
+                        <tr><td><code>done</code></td><td class="dir-out">out</td><td>1</td><td>Operation complete</td></tr>
+                        <tr><td><code>mem_*</code></td><td class="dir-inout">i/o</td><td>varies</td><td>Memory channel signals</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- PC Module -->
+        <section id="pc">
+            <h2>pc.sv — Program Counter</h2>
+            
+            <div class="module-card">
+                <h3>module pc <span class="file-path">src/pc.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Tracks current instruction address</div>
+                    <div><label>Features</label>Sequential increment, branch offset, NZP evaluation</div>
+                    <div><label>Instance Count</label>THREADS_PER_BLOCK per core</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Reset PC to initial</td></tr>
+                        <tr><td><code>initial_pc</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Starting address</td></tr>
+                        <tr><td><code>update_enable</code></td><td class="dir-in">in</td><td>1</td><td>Update PC enable</td></tr>
+                        <tr><td><code>is_branch</code></td><td class="dir-in">in</td><td>1</td><td>Branch instruction flag</td></tr>
+                        <tr><td><code>branch_nzp</code></td><td class="dir-in">in</td><td>3</td><td>Branch condition mask</td></tr>
+                        <tr><td><code>current_nzp</code></td><td class="dir-in">in</td><td>3</td><td>Current condition flags</td></tr>
+                        <tr><td><code>branch_offset</code></td><td class="dir-in">in</td><td>9</td><td>Signed branch offset</td></tr>
+                        <tr><td><code>pc</code></td><td class="dir-out">out</td><td>ADDR_WIDTH</td><td>Current PC value</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>PC Update Logic</h4>
+                <pre><code class="language-verilog">wire branch_taken = is_branch && ((branch_nzp & current_nzp) != 0);
+
+always @(posedge clk) begin
+    if (reset)
+        pc <= initial_pc;
+    else if (update_enable)
+        pc <= branch_taken ? (pc + branch_offset) : (pc + 1);
+end</code></pre>
+            </div>
+        </section>
+
+        <!-- Registers Module -->
+        <section id="registers">
+            <h2>registers.sv — Register File</h2>
+            
+            <div class="module-card">
+                <h3>module registers <span class="file-path">src/registers.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Thread-local register storage</div>
+                    <div><label>Registers</label>R0–R12 (writable), R13–R15 (read-only)</div>
+                    <div><label>Instance Count</label>THREADS_PER_BLOCK per core</div>
+                </div>
+                
+                <h4>Port Interface</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>clk</code></td><td class="dir-in">in</td><td>1</td><td>System clock</td></tr>
+                        <tr><td><code>reset</code></td><td class="dir-in">in</td><td>1</td><td>Clear all registers</td></tr>
+                        <tr><td><code>read_addr1</code></td><td class="dir-in">in</td><td>4</td><td>RS1 address</td></tr>
+                        <tr><td><code>read_addr2</code></td><td class="dir-in">in</td><td>4</td><td>RS2 address</td></tr>
+                        <tr><td><code>read_data1</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>RS1 data</td></tr>
+                        <tr><td><code>read_data2</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>RS2 data</td></tr>
+                        <tr><td><code>write_enable</code></td><td class="dir-in">in</td><td>1</td><td>Write enable</td></tr>
+                        <tr><td><code>write_addr</code></td><td class="dir-in">in</td><td>4</td><td>RD address</td></tr>
+                        <tr><td><code>write_data</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Data to write</td></tr>
+                        <tr><td><code>block_idx</code></td><td class="dir-in">in</td><td>varies</td><td>For R13</td></tr>
+                        <tr><td><code>block_dim</code></td><td class="dir-in">in</td><td>varies</td><td>For R14</td></tr>
+                        <tr><td><code>thread_idx</code></td><td class="dir-in">in</td><td>varies</td><td>For R15</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Special Register Mapping</h4>
+                <pre><code class="language-verilog">always_comb begin
+    case (read_addr1)
+        4'd13: read_data1 = block_idx;    // %blockIdx
+        4'd14: read_data1 = block_dim;    // %blockDim
+        4'd15: read_data1 = thread_idx;   // %threadIdx
+        default: read_data1 = regs[read_addr1];
+    endcase
+end
+
+// Write protection for special registers
+wire write_allowed = (write_addr < 4'd13);</code></pre>
+            </div>
+        </section>
+
+        <!-- Controller Module -->
+        <section id="controller">
+            <h2>controller.sv — Memory Controller</h2>
+            
+            <div class="module-card">
+                <h3>module controller <span class="file-path">src/controller.sv</span></h3>
+                
+                <div class="module-summary">
+                    <div><label>Purpose</label>Arbitrates memory access from multiple cores</div>
+                    <div><label>Instances</label>2 in gpu.sv (program memory, data memory)</div>
+                    <div><label>Protocol</label>Channelized request/response handshaking</div>
+                </div>
+                
+                <h4>Channel Interface (Per Core)</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>channel_read_valid[i]</code></td><td class="dir-in">in</td><td>1</td><td>Read request from core i</td></tr>
+                        <tr><td><code>channel_read_address[i]</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Read address from core i</td></tr>
+                        <tr><td><code>channel_read_ready[i]</code></td><td class="dir-out">out</td><td>1</td><td>Read complete to core i</td></tr>
+                        <tr><td><code>channel_read_data[i]</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>Read data to core i</td></tr>
+                        <tr><td><code>channel_write_valid[i]</code></td><td class="dir-in">in</td><td>1</td><td>Write request from core i</td></tr>
+                        <tr><td><code>channel_write_address[i]</code></td><td class="dir-in">in</td><td>ADDR_WIDTH</td><td>Write address from core i</td></tr>
+                        <tr><td><code>channel_write_data[i]</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Write data from core i</td></tr>
+                        <tr><td><code>channel_write_ready[i]</code></td><td class="dir-out">out</td><td>1</td><td>Write complete to core i</td></tr>
+                    </tbody>
+                </table>
+                
+                <h4>Memory Interface (External)</h4>
+                <table class="port-table">
+                    <thead>
+                        <tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>mem_read_valid</code></td><td class="dir-out">out</td><td>1</td><td>Read request to memory</td></tr>
+                        <tr><td><code>mem_read_address</code></td><td class="dir-out">out</td><td>ADDR_WIDTH</td><td>Address to read</td></tr>
+                        <tr><td><code>mem_read_data</code></td><td class="dir-in">in</td><td>DATA_WIDTH</td><td>Data from memory</td></tr>
+                        <tr><td><code>mem_read_ready</code></td><td class="dir-in">in</td><td>1</td><td>Memory ready</td></tr>
+                        <tr><td><code>mem_write_valid</code></td><td class="dir-out">out</td><td>1</td><td>Write request to memory</td></tr>
+                        <tr><td><code>mem_write_address</code></td><td class="dir-out">out</td><td>ADDR_WIDTH</td><td>Address to write</td></tr>
+                        <tr><td><code>mem_write_data</code></td><td class="dir-out">out</td><td>DATA_WIDTH</td><td>Data to write</td></tr>
+                        <tr><td><code>mem_write_ready</code></td><td class="dir-in">in</td><td>1</td><td>Memory write complete</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="file-map">
+            <h2>Source File Map</h2>
+            <table class="port-table">
+                <thead>
+                    <tr><th>File</th><th>Module</th><th>LOC</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>src/gpu.sv</code></td><td>gpu</td><td>~200</td><td>Top-level integration</td></tr>
+                    <tr><td><code>src/dcr.sv</code></td><td>dcr</td><td>~50</td><td>Device configuration</td></tr>
+                    <tr><td><code>src/dispatch.sv</code></td><td>dispatch</td><td>~100</td><td>Block dispatcher</td></tr>
+                    <tr><td><code>src/core.sv</code></td><td>core</td><td>~300</td><td>Processing core</td></tr>
+                    <tr><td><code>src/scheduler.sv</code></td><td>scheduler</td><td>~150</td><td>Core FSM</td></tr>
+                    <tr><td><code>src/fetcher.sv</code></td><td>fetcher</td><td>~60</td><td>Instruction fetch</td></tr>
+                    <tr><td><code>src/decoder.sv</code></td><td>decoder</td><td>~80</td><td>Instruction decode</td></tr>
+                    <tr><td><code>src/alu.sv</code></td><td>alu</td><td>~50</td><td>Arithmetic/logic unit</td></tr>
+                    <tr><td><code>src/lsu.sv</code></td><td>lsu</td><td>~80</td><td>Load/store unit</td></tr>
+                    <tr><td><code>src/pc.sv</code></td><td>pc</td><td>~40</td><td>Program counter</td></tr>
+                    <tr><td><code>src/registers.sv</code></td><td>registers</td><td>~60</td><td>Register file</td></tr>
+                    <tr><td><code>src/controller.sv</code></td><td>controller</td><td>~120</td><td>Memory controller</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <nav class="chapter-nav bottom-nav">
+        <a href="appendix-b-instruction-reference.html" class="nav-link">← Prev: Appendix B</a>
+        <span class="nav-divider">|</span>
+        <a href="../table-of-contents.html" class="nav-link">Table of Contents</a>
+        <span class="nav-divider">|</span>
+        <a href="appendix-d-simulation-guide.html" class="nav-link">Next: Appendix D →</a>
+    </nav>
+
+    <footer class="chapter-footer">
+        <p>Tiny-GPU Architecture Guide</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'neutral',
+            flowchart: { useMaxWidth: true, htmlLabels: true }
+        });
+    </script>
+</body>
+</html>

@@ -1,40 +1,350 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 23: Signoff, Verification, and DRC | Create Your Own GPU</title>
+    <title>Chapter 23: Design Signoff | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .success-box { background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .danger-box { background: #ffebee; border: 1px solid #f44336; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .check-item { padding: 8px 0; border-bottom: 1px dashed #ddd; }
+        .check-item:last-child { border-bottom: none; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-22.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-22.html">← Previous: Physical Design Flow</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-24.html">Next →</a>
+            <a href="chapter-24.html">Next: Tape-Out and Manufacturing →</a>
         </div>
 
-        <h1>Chapter 23: Signoff, Verification, and DRC</h1>
-        <div style="color: #999; margin: 20px 0;">V: Physical Design & Manufacturing • Reading time: ~60 min</div>
-        
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Signoff, Verification, and DRC</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <h1>Chapter 23: Design Signoff</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part VI: Chip Fabrication</span>
+            <span>Reading time: ~50 minutes</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-22.html">← Previous</a>
+        <h2>Introduction</h2>
+        <p>Before a design goes to manufacturing, it must pass signoff checks. These verify that the design will work correctly after fabrication. A single signoff failure can mean a non-functional chip—millions of dollars wasted.</p>
+
+        <h2>23.1 Signoff Categories</h2>
+
+        <div class="mermaid">
+graph TB
+    SIGNOFF["Design Signoff"]
+    SIGNOFF --> DRC["DRC<br/>Design Rules"]
+    SIGNOFF --> LVS["LVS<br/>Layout vs Schematic"]
+    SIGNOFF --> STA["STA<br/>Static Timing"]
+    SIGNOFF --> IR["IR Drop<br/>Analysis"]
+    SIGNOFF --> EM["Electromigration<br/>Analysis"]
+    SIGNOFF --> ANT["Antenna<br/>Checks"]
+    
+    style SIGNOFF fill:#667eea,color:white
+    style DRC fill:#e3f2fd
+    style LVS fill:#e3f2fd
+    style STA fill:#fff3e0
+    style IR fill:#fff3e0
+    style EM fill:#e8f5e9
+    style ANT fill:#e8f5e9
+        </div>
+
+        <h2>23.2 Design Rule Checking (DRC)</h2>
+
+        <p>DRC verifies that layout geometries meet manufacturing constraints:</p>
+
+        <table>
+            <thead>
+                <tr><th>Rule Category</th><th>Examples</th><th>Why It Matters</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Width</td><td>Min metal width, poly width</td><td>Lithography resolution</td></tr>
+                <tr><td>Spacing</td><td>Metal-metal, poly-diffusion</td><td>Prevent shorts</td></tr>
+                <tr><td>Enclosure</td><td>Via enclosure, contact overlap</td><td>Reliable connections</td></tr>
+                <tr><td>Area</td><td>Min area, density</td><td>Manufacturing yield</td></tr>
+                <tr><td>Antenna</td><td>Gate-to-metal ratio</td><td>Prevent oxide damage</td></tr>
+            </tbody>
+        </table>
+
+        <h3>23.2.1 Running DRC</h3>
+
+        <div class="code-block">
+<code><span class="comment"># Using Magic for DRC</span>
+magic -T sky130A gpu.gds
+drc check
+drc why      <span class="comment"># Explain violations</span>
+drc count    <span class="comment"># Count total violations</span>
+
+<span class="comment"># Using KLayout for DRC</span>
+klayout -b -r sky130_drc.lydrc gpu.gds
+</code>
+        </div>
+
+        <div class="success-box">
+            <strong>✓ DRC Clean:</strong> 0 violations means the layout can be manufactured.
+        </div>
+
+        <div class="danger-box">
+            <strong>✗ DRC Violation:</strong> "Metal1 spacing violation at (100.5, 200.3)" - wires too close together.
+        </div>
+
+        <h2>23.3 Layout vs. Schematic (LVS)</h2>
+
+        <p>LVS verifies that the layout matches the netlist:</p>
+
+        <div class="mermaid">
+graph LR
+    NET["Gate-Level<br/>Netlist"] --> COMPARE["LVS<br/>Tool"]
+    GDS["Layout<br/>(GDSII)"] --> EXTRACT["Extraction"] --> SPICE["Extracted<br/>Netlist"]
+    SPICE --> COMPARE
+    COMPARE --> RESULT["Match?"]
+    
+    style COMPARE fill:#667eea,color:white
+    style RESULT fill:#e8f5e9
+        </div>
+
+        <h3>23.3.1 Common LVS Errors</h3>
+
+        <table>
+            <thead>
+                <tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Open</td><td>Missing connection</td><td>Add wire/via</td></tr>
+                <tr><td>Short</td><td>Unintended connection</td><td>Remove overlapping metal</td></tr>
+                <tr><td>Device Mismatch</td><td>Wrong transistor size</td><td>Check cell placement</td></tr>
+                <tr><td>Port Mismatch</td><td>Missing I/O pin</td><td>Add pin label</td></tr>
+            </tbody>
+        </table>
+
+        <div class="code-block">
+<code><span class="comment"># Run LVS with netgen</span>
+netgen -batch lvs "gpu.spice gpu" "gpu_netlist.v gpu" setup.tcl
+
+<span class="comment"># Output: "Circuits match uniquely" or error report</span>
+</code>
+        </div>
+
+        <h2>23.4 Static Timing Analysis (STA)</h2>
+
+        <p>STA verifies that all timing constraints are met:</p>
+
+        <h3>23.4.1 Setup and Hold Checks</h3>
+
+        <div class="mermaid">
+graph LR
+    subgraph "Setup Check"
+        DATA1["Data"] -->|arrives before| CLK1["Clock Edge"]
+    end
+    
+    subgraph "Hold Check"
+        CLK2["Clock Edge"] -->|data stable after| DATA2["Data"]
+    end
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Check</th><th>Requirement</th><th>Slack Formula</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Setup</td><td>Data arrives before clock</td><td>Required - Arrival</td></tr>
+                <tr><td>Hold</td><td>Data stable after clock</td><td>Arrival - Required</td></tr>
+            </tbody>
+        </table>
+
+        <h3>23.4.2 Timing Corners</h3>
+
+        <table>
+            <thead>
+                <tr><th>Corner</th><th>Conditions</th><th>Checks</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Slow-Slow (SS)</td><td>Slow transistors, low voltage, high temp</td><td>Setup (worst case)</td></tr>
+                <tr><td>Fast-Fast (FF)</td><td>Fast transistors, high voltage, low temp</td><td>Hold (worst case)</td></tr>
+                <tr><td>Typical (TT)</td><td>Nominal conditions</td><td>General check</td></tr>
+            </tbody>
+        </table>
+
+        <div class="code-block">
+<code><span class="comment"># OpenSTA timing report</span>
+Startpoint: core_0/alu/rs_reg[0]
+Endpoint: core_0/registers/R0_reg[0]
+Path Group: clk
+Path Type: max (Setup)
+
+  Point                                    Incr      Path
+  --------------------------------------------------------
+  clock clk (rise edge)                   0.000     0.000
+  core_0/alu/rs_reg[0]/CLK                0.150     0.150
+  core_0/alu/rs_reg[0]/Q (DFF)            0.210     0.360
+  core_0/alu/add_35/A (AND2)              0.050     0.410
+  core_0/alu/add_35/Y                     0.180     0.590
+  ...
+  core_0/registers/R0_reg[0]/D            0.030     9.200
+  data arrival time                                  9.200
+
+  clock clk (rise edge)                  10.000    10.000
+  core_0/registers/R0_reg[0]/CLK          0.150    10.150
+  library setup time                     -0.100    10.050
+  data required time                               10.050
+  --------------------------------------------------------
+  slack (MET)                                        0.850
+</code>
+        </div>
+
+        <div class="success-box">
+            <strong>Slack = 0.850ns (POSITIVE):</strong> Timing is met with 850ps margin.
+        </div>
+
+        <h2>23.5 Power Analysis</h2>
+
+        <h3>23.5.1 IR Drop Analysis</h3>
+
+        <p>IR drop causes voltage reduction at cells far from power pins:</p>
+
+        <div class="warning-box">
+            <strong>⚠️ IR Drop Impact:</strong> 5% voltage drop = ~10% slower gates = potential timing failures.
+        </div>
+
+        <div class="code-block">
+<code><span class="comment"># OpenROAD IR drop analysis</span>
+analyze_power_grid -net VDD
+report_power_grid -all
+
+<span class="comment"># Maximum IR drop should be < 5% of VDD (< 90mV for 1.8V)</span>
+</code>
+        </div>
+
+        <h3>23.5.2 Electromigration (EM)</h3>
+
+        <p>High current density causes metal atoms to migrate, eventually breaking wires:</p>
+
+        <table>
+            <thead>
+                <tr><th>Wire Type</th><th>Max Current Density</th><th>Check</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Signal</td><td>~1 mA/μm</td><td>Average current</td></tr>
+                <tr><td>Power</td><td>~2 mA/μm</td><td>Peak current</td></tr>
+                <tr><td>Clock</td><td>~1.5 mA/μm</td><td>Switching current</td></tr>
+            </tbody>
+        </table>
+
+        <h2>23.6 Signoff Checklist</h2>
+
+        <div class="info-box">
+            <h4>Pre-Tapeout Checklist</h4>
+            <div class="check-item">☐ DRC clean (0 violations)</div>
+            <div class="check-item">☐ LVS clean (circuits match)</div>
+            <div class="check-item">☐ Setup timing met (all corners)</div>
+            <div class="check-item">☐ Hold timing met (all corners)</div>
+            <div class="check-item">☐ IR drop < 5% VDD</div>
+            <div class="check-item">☐ EM current density within limits</div>
+            <div class="check-item">☐ Antenna rules passed</div>
+            <div class="check-item">☐ ERC (electrical rules) clean</div>
+            <div class="check-item">☐ Formal verification passed</div>
+            <div class="check-item">☐ Post-layout simulation passed</div>
+        </div>
+
+        <h2>23.7 OpenLane Signoff Reports</h2>
+
+        <div class="code-block">
+<code><span class="comment"># Key signoff reports in OpenLane</span>
+designs/gpu/runs/run1/reports/
+├── signoff/
+│   ├── drc.rpt           <span class="comment"># DRC violations</span>
+│   ├── lvs.rpt           <span class="comment"># LVS comparison</span>
+│   ├── sta-rcx/          <span class="comment"># Post-extraction timing</span>
+│   │   ├── multi_corner/
+│   │   │   ├── min.rpt   <span class="comment"># Hold analysis</span>
+│   │   │   └── max.rpt   <span class="comment"># Setup analysis</span>
+│   └── antenna.rpt       <span class="comment"># Antenna violations</span>
+</code>
+        </div>
+
+        <h2>23.8 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 23.1: Interpret Timing Report</h4>
+            <p>Given: Clock period = 10ns, data arrival = 11.2ns, setup time = 0.1ns. What is the slack, and does the path meet timing?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Required time = 10ns - 0.1ns = 9.9ns</p>
+                    <p>Slack = Required - Arrival = 9.9 - 11.2 = -1.3ns</p>
+                    <p><strong>FAILED:</strong> Negative slack means timing violation. Path is 1.3ns too slow.</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 23.2: DRC Debugging</h4>
+            <p>You have 5 DRC violations: 3 "Metal1 min width" and 2 "Via enclosure". What likely caused these?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p><strong>Metal1 min width:</strong> Router created wires thinner than allowed. Could be due to congestion forcing narrow routes. Fix: reduce utilization or add routing tracks.</p>
+                    <p><strong>Via enclosure:</strong> Metal doesn't fully surround via. Usually from via placement at track edges. Fix: adjust via positions or extend metal.</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>23.9 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>✓ DRC ensures manufacturability:</strong> Every geometry must follow foundry rules.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>✓ LVS ensures correctness:</strong> Layout must match the intended circuit.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>✓ STA ensures timing:</strong> All paths must meet setup and hold across corners.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>✓ Power checks ensure reliability:</strong> IR drop and EM must be within limits for chip lifetime.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-22.html">← Previous: Physical Design Flow</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-24.html">Next →</a>
+            <a href="chapter-24.html">Next: Tape-Out and Manufacturing →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

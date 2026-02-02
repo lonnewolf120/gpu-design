@@ -2,6 +2,10 @@
 
 This is a comprehensive 750+ page book on GPU design, from fundamentals to manufacturing silicon.
 
+## 🌐 Live Book
+
+**Read online:** [https://lonnewolf120.github.io/gpu-design/](https://lonnewolf120.github.io/gpu-design/)
+
 ## 📚 Book Structure
 
 - **25 Chapters** organized in 5 parts
@@ -11,7 +15,10 @@ This is a comprehensive 750+ page book on GPU design, from fundamentals to manuf
 
 ## 🚀 Quick Start
 
-### Option 1: Local File (Simple)
+### Option 1: Read Online (Recommended)
+Visit [https://lonnewolf120.github.io/gpu-design/](https://lonnewolf120.github.io/gpu-design/)
+
+### Option 2: Local File (Simple)
 Open `table-of-contents.html` in your browser to see the complete book index.
 
 ### Option 2: Local Server (Recommended)
@@ -23,6 +30,14 @@ python3 -m http.server 8000
 ```
 
 Then visit `http://localhost:8000/table-of-contents.html`
+
+## 🚢 Deployment
+
+The book is automatically deployed to GitHub Pages on every push. See [DEPLOYMENT.md](DEPLOYMENT.md) for:
+- Setup instructions
+- Custom domain configuration  
+- Alternative hosting platforms
+- Troubleshooting guide
 
 ## 📁 File Structure
 

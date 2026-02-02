@@ -5,18 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 12: Software Stack and Compilation | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <style>
-        .chapter-content { max-width: 850px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
         .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 13px; }
         .key-takeaway { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin: 24px 0; }
+        .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
+        .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         th { background: #f5f5f5; font-weight: bold; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; }
     </style>
 </head>
 <body>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: { primaryColor: '#e3f2fd', primaryTextColor: '#1565c0', primaryBorderColor: '#90caf9', lineColor: '#64b5f6', secondaryColor: '#f3e5f5', tertiaryColor: '#fff3e0' } });
+    </script>
+
     <div class="chapter-content">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
+        <div class="chapter-nav">
             <a href="chapter-11.html">← Previous: Graphics vs Compute</a>
             <a href="../table-of-contents.html">Table of Contents</a>
             <a href="chapter-13.html">Next: Compilers & Code Generation →</a>
@@ -35,16 +44,294 @@
         </p>
 
         <h2>12.1 GPU Software Stack Layers</h2>
-        
+
+        <div class="mermaid">
+            flowchart TB
+                subgraph User["USER SPACE"]
+                    APP["Application Code<br/>(Python, C++, etc.)"]
+                    API["CUDA/HIP/OpenCL API<br/>cudaMemcpy, cudaLaunchKernel"]
+                    RT["GPU Runtime Library<br/>libnvcc, libhip"]
+                end
+                
+                subgraph Kernel["KERNEL SPACE"]
+                    DRV["GPU Driver<br/>NVIDIA driver, AMDGPU"]
+                    KMD["Kernel Mode Driver<br/>DRM/KMS interface"]
+                end
+                
+                subgraph Hardware["HARDWARE"]
+                    CP["Command Processor<br/>Hardware scheduler"]
+                    GPU["GPU Cores<br/>SMs, CUs, etc."]
+                end
+                
+                APP --> API --> RT --> DRV --> KMD --> CP --> GPU
+                
+                style User fill:#e3f2fd
+                style Kernel fill:#fff3e0
+                style Hardware fill:#c8e6c9
+        </div>
+        <div class="figure-caption">Figure 12.1: GPU software stack from application to hardware</div>
+
+        <h2>12.2 High-Level Stack Overview</h2>
+
+        <div class="mermaid">
+            flowchart LR
+                subgraph APIs["PROGRAMMING APIS"]
+                    GRAPHICS["Graphics APIs<br/>OpenGL, Vulkan, DirectX"]
+                    COMPUTE["Compute APIs<br/>CUDA, ROCm, OpenCL"]
+                end
+                
+                subgraph Driver["DRIVER & RUNTIME"]
+                    DRV["Driver Layer<br/>Command submission"]
+                    SCHED["Hardware Scheduler<br/>Command processor"]
+                end
+                
+                subgraph HW["GPU HARDWARE"]
+                    CORES["GPU Cores<br/>Execute shaders/kernels"]
+                end
+                
+                GRAPHICS --> DRV
+                COMPUTE --> DRV
+                DRV --> SCHED --> CORES
+                
+                style GRAPHICS fill:#ffe0b2
+                style COMPUTE fill:#fff3e0
+                style CORES fill:#c8e6c9
+        </div>
+
+        <h2>12.3 Drivers & Command Processor</h2>
+
+        <p>
+            The driver translates API calls into command buffers and submits them to the GPU's command processor. 
+            Drivers manage context switching, DMA mapping, page pinning, and synchronization across multiple queues.
+        </p>
+
+        <div class="mermaid">
+            flowchart TB
+                subgraph Application["APPLICATION"]
+                    KERNEL["cudaLaunchKernel()"]
+                    MEMCPY["cudaMemcpy()"]
+                end
+                
+                subgraph Driver["DRIVER"]
+                    CMD["Build Command Buffer<br/>LOAD_KERNEL, SET_ARGS, DISPATCH"]
+                    PIN["Pin memory pages"]
+                    MMU["Program GPU MMU"]
+                    SUBMIT["Submit to hardware queue"]
+                end
+                
+                subgraph Hardware["COMMAND PROCESSOR"]
+                    PARSE["Parse commands"]
+                    DISPATCH["Dispatch to SMs"]
+                    COMPLETE["Signal completion"]
+                end
+                
+                KERNEL --> CMD
+                MEMCPY --> CMD
+                CMD --> PIN --> MMU --> SUBMIT --> PARSE --> DISPATCH --> COMPLETE
+                
+                style Application fill:#e3f2fd
+                style Driver fill:#fff3e0
+                style Hardware fill:#c8e6c9
+        </div>
+        <div class="figure-caption">Figure 12.2: Driver command submission flow</div>
+
         <div class="code-block">
-<pre>Application Code
-    ↓
-CUDA/HIP/OpenCL API (cudaMemcpy, cudaLaunchKernel, etc.)
-    ↓
-GPU Runtime Library (libnvcc, libhip)
-    ↓
-GPU Driver (NVIDIA driver, AMD AMDGPU driver)
-    ↓
-Kernel Mode Driver
-    ↓
-GPU Hardware
+<pre>// Pseudocode: Submitting a compute kernel
+CommandBuffer *cmd = new CommandBuffer();
+cmd->append(LOAD_KERNEL, kernel_id);
+cmd->append(SET_ARGS, args_ptr);
+cmd->append(DISPATCH, grid_dim, block_dim);
+driver->submit(cmd);
+// Driver will pin pages, program the MMU, and notify command processor</pre>
+        </div>
+
+        <h2>12.4 Memory Management & Unified Memory</h2>
+
+        <div class="mermaid">
+            flowchart LR
+                subgraph Traditional["TRADITIONAL MODEL"]
+                    HOST1["Host Memory<br/>(CPU RAM)"]
+                    DEV1["Device Memory<br/>(GPU VRAM)"]
+                    COPY["Explicit copies:<br/>cudaMemcpy()"]
+                    HOST1 <--> COPY <--> DEV1
+                end
+                
+                subgraph Unified["UNIFIED MEMORY"]
+                    UM["Unified Address Space<br/>Single pointer"]
+                    PAGEFAULT["Page fault migration<br/>Automatic transfers"]
+                    UM --> PAGEFAULT
+                end
+                
+                style Traditional fill:#fff3e0
+                style Unified fill:#c8e6c9
+        </div>
+
+        <p>
+            GPUs use device-local memory (VRAM) and host-visible pinned memory. Modern runtimes offer 
+            <strong>unified memory</strong>: the driver and runtime migrate pages between host and device as needed.
+        </p>
+
+        <div class="engineer-note">
+            <strong>Trade-off:</strong> Unified memory simplifies programming but adds page-fault overhead. 
+            Explicit copies (cudaMemcpyAsync) are deterministic and often faster for bulk transfers.
+        </div>
+
+        <h2>12.5 Kernel Launch & Scheduling</h2>
+
+        <div class="mermaid">
+            flowchart TB
+                subgraph Launch["KERNEL LAUNCH"]
+                    GRID["Grid: 256 blocks"]
+                    BLOCKS["Block: 256 threads"]
+                end
+                
+                subgraph Scheduler["HARDWARE SCHEDULER"]
+                    QUEUE["Work-group queue"]
+                    ASSIGN["Assign blocks to SMs"]
+                    WARP["Warp scheduler<br/>per SM"]
+                end
+                
+                subgraph Execution["EXECUTION"]
+                    SM0["SM 0: Blocks 0-3"]
+                    SM1["SM 1: Blocks 4-7"]
+                    SMN["SM N: Blocks ..."]
+                end
+                
+                GRID --> QUEUE
+                BLOCKS --> QUEUE
+                QUEUE --> ASSIGN
+                ASSIGN --> SM0 & SM1 & SMN
+                SM0 --> WARP
+                
+                style Launch fill:#e3f2fd
+                style Scheduler fill:#fff9c4
+                style Execution fill:#c8e6c9
+        </div>
+
+        <h2>12.6 Driver Development Notes</h2>
+
+        <div class="engineer-note">
+            <strong>Best Practices:</strong>
+            <ul>
+                <li>Keep interrupt handlers minimal; perform heavy work in deferred contexts</li>
+                <li>Test page-faults under heavy GPU workloads</li>
+                <li>Ensure DMA mapping is robust across different memory types</li>
+                <li>Use fence mechanisms for proper synchronization</li>
+            </ul>
+        </div>
+
+        <h2>12.7 API Comparison</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>CUDA</th>
+                    <th>HIP (AMD)</th>
+                    <th>OpenCL</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Vendor</td>
+                    <td>NVIDIA only</td>
+                    <td>AMD + NVIDIA</td>
+                    <td>Cross-vendor</td>
+                </tr>
+                <tr>
+                    <td>Language</td>
+                    <td>CUDA C++</td>
+                    <td>HIP C++</td>
+                    <td>OpenCL C</td>
+                </tr>
+                <tr>
+                    <td>Runtime</td>
+                    <td>Proprietary</td>
+                    <td>Open source</td>
+                    <td>Open standard</td>
+                </tr>
+                <tr>
+                    <td>Ecosystem</td>
+                    <td>Largest</td>
+                    <td>Growing</td>
+                    <td>Moderate</td>
+                </tr>
+                <tr>
+                    <td>Debugging</td>
+                    <td>cuda-gdb, Nsight</td>
+                    <td>rocgdb</td>
+                    <td>Vendor tools</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>12.8 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 12.1: Command Buffer Sizing</h4>
+            <p>
+                If a command buffer entry is 16 bytes on average, estimate the memory required to queue 10,000 kernel dispatches.
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>10,000 × 16 B = 160,000 B ≈ 156.25 KB. Add overhead for descriptors and alignment: ~200 KB total.</p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 12.2: Unified Memory Trade-offs</h4>
+            <p>Explain trade-offs between explicit async memory copies (cudaMemcpyAsync) and relying on unified memory page migration in terms of latency and determinism.</p>
+            <details>
+                <summary>Solution</summary>
+                <p>Explicit copies are deterministic and avoid page-fault overhead; unified memory simplifies programming but may incur unpredictable page-fault latency at runtime.</p>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 12.3: Driver Latency</h4>
+            <p>
+                A kernel launch takes 5μs driver overhead + 100μs GPU execution. If you launch 1000 small kernels sequentially, what's the total time? How could you reduce it?
+            </p>
+            <details>
+                <summary>Solution</summary>
+                <p>Total: 1000 × (5 + 100) = 105,000 μs = 105 ms. Reduce by batching kernels (1 launch of larger kernel) or using CUDA graphs to amortize driver overhead.</p>
+            </details>
+        </div>
+
+        <h2>12.9 Further Reading</h2>
+
+        <ul>
+            <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/" target="_blank">NVIDIA CUDA Programming Guide</a></li>
+            <li><a href="https://www.khronos.org/vulkan/" target="_blank">Vulkan Specification and Memory Model</a></li>
+            <li>Linux DRM/KMS and AMDGPU driver documentation</li>
+            <li><a href="https://rocm.docs.amd.com/" target="_blank">AMD ROCm Documentation</a></li>
+        </ul>
+
+        <h2>12.10 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <strong>Drivers are the bridge:</strong> They transform API requests into hardware commands 
+            and manage memory, synchronization, and context switching.
+        </div>
+
+        <div class="key-takeaway">
+            <strong>Unified memory simplifies development</strong> but may hurt latency determinism; 
+            profile carefully before relying on it for performance-critical paths.
+        </div>
+
+        <div class="key-takeaway">
+            <strong>Command batching reduces overhead:</strong> Driver/kernel launch overhead can dominate 
+            for small kernels. Use CUDA graphs, kernel fusion, or batch processing.
+        </div>
+
+        <div class="chapter-nav">
+            <a href="chapter-11.html">← Previous: Graphics vs Compute</a>
+            <a href="../table-of-contents.html">Table of Contents</a>
+            <a href="chapter-13.html">Next: Compilers & Code Generation →</a>
+        </div>
+    </div>
+
+    <script src="../script.js"></script>
+    <script src="../navigation.js"></script>
+</body>
+</html>

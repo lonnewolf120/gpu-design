@@ -1,40 +1,551 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 15: Microarchitecture Design Specifications | Create Your Own GPU</title>
+    <title>Chapter 15: Microarchitecture Fundamentals | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .arch-diagram { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 30px; border-radius: 12px; margin: 20px 0; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-14.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-14.html">← Previous: Testing and Verification</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-16.html">Next →</a>
+            <a href="chapter-16.html">Next: RTL Fundamentals →</a>
         </div>
 
-        <h1>Chapter 15: Microarchitecture Design Specifications</h1>
-        <div style="color: #999; margin: 20px 0;">IV: Hardware Implementation • Reading time: ~60 min</div>
+        <h1>Chapter 15: Microarchitecture Fundamentals</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part IV: RTL Implementation</span>
+            <span>Reading time: ~60 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>Microarchitecture is the bridge between the instruction set architecture (ISA) that programmers see and the physical transistors on silicon. It defines <em>how</em> a processor executes instructions—the internal organization of pipelines, functional units, registers, and control logic.</p>
         
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Microarchitecture Design Specifications</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <p>This chapter establishes the fundamental concepts needed to understand GPU microarchitecture, preparing you for the deep dive into tiny-gpu's RTL implementation in subsequent chapters.</p>
+
+        <h2>15.1 Architecture vs Microarchitecture</h2>
+
+        <table>
+            <thead>
+                <tr><th>Aspect</th><th>Architecture (ISA)</th><th>Microarchitecture</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Definition</td><td>What the processor does</td><td>How the processor does it</td></tr>
+                <tr><td>Visibility</td><td>Visible to programmers</td><td>Hidden from programmers</td></tr>
+                <tr><td>Examples</td><td>Instructions, registers, memory model</td><td>Pipeline stages, cache sizes, branch predictors</td></tr>
+                <tr><td>Changes</td><td>Breaking changes (SW recompile)</td><td>Performance changes only</td></tr>
+                <tr><td>tiny-gpu</td><td>11 instructions, 16 registers</td><td>6-stage scheduler, 4 data channels</td></tr>
+            </tbody>
+        </table>
+
+        <div class="info-box">
+            <strong>Key Insight:</strong> Multiple microarchitectures can implement the same ISA. For example, Intel's Skylake, Ice Lake, and Alder Lake all implement x86-64, but with vastly different microarchitectures offering different performance characteristics.
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-14.html">← Previous</a>
+        <h2>15.2 Fundamental Building Blocks</h2>
+
+        <h3>15.2.1 Combinational vs Sequential Logic</h3>
+
+        <div class="mermaid">
+graph LR
+    subgraph "Combinational Logic"
+        A[Inputs] --> B["Logic Gates<br/>(AND, OR, XOR)"]
+        B --> C[Outputs]
+    end
+    
+    subgraph "Sequential Logic"
+        D[Inputs] --> E["Logic + State<br/>(Flip-flops)"]
+        E --> F[Outputs]
+        F -.-> |Clock| E
+    end
+    
+    style B fill:#e3f2fd
+    style E fill:#fff3e0
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Behavior</th><th>Timing</th><th>Examples</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Combinational</td><td>Output = f(current inputs)</td><td>Propagation delay only</td><td>ALU, multiplexer, decoder</td></tr>
+                <tr><td>Sequential</td><td>Output = f(inputs, state)</td><td>Clock-synchronized</td><td>Registers, FSMs, counters</td></tr>
+            </tbody>
+        </table>
+
+        <h3>15.2.2 Key Components</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "Datapath Components"
+        A["Registers<br/>Fast storage"]
+        B["ALU<br/>Arithmetic ops"]
+        C["Multiplexers<br/>Data routing"]
+        D["Memory<br/>Large storage"]
+    end
+    
+    subgraph "Control Components"
+        E["FSM<br/>State machine"]
+        F["Decoder<br/>Instruction parse"]
+        G["Control Logic<br/>Signal generation"]
+    end
+    
+    E --> A
+    E --> B
+    F --> G
+    G --> C
+    
+    style A fill:#e8f5e9
+    style B fill:#e8f5e9
+    style E fill:#fff3e0
+    style F fill:#fff3e0
+        </div>
+
+        <h2>15.3 Pipelining Fundamentals</h2>
+
+        <p>Pipelining is the most important microarchitectural technique for improving throughput. It divides instruction execution into stages, allowing multiple instructions to execute simultaneously.</p>
+
+        <h3>15.3.1 Classic 5-Stage Pipeline</h3>
+
+        <div class="mermaid">
+graph LR
+    IF["IF<br/>Fetch"] --> ID["ID<br/>Decode"]
+    ID --> EX["EX<br/>Execute"]
+    EX --> MEM["MEM<br/>Memory"]
+    MEM --> WB["WB<br/>Writeback"]
+    
+    style IF fill:#e3f2fd
+    style ID fill:#e8f5e9
+    style EX fill:#fff3e0
+    style MEM fill:#f3e5f5
+    style WB fill:#fce4ec
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Stage</th><th>Action</th><th>Key Components</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>IF (Instruction Fetch)</td><td>Read instruction from memory</td><td>PC, instruction memory</td></tr>
+                <tr><td>ID (Instruction Decode)</td><td>Parse opcode, read registers</td><td>Decoder, register file</td></tr>
+                <tr><td>EX (Execute)</td><td>Perform ALU operation</td><td>ALU, branch logic</td></tr>
+                <tr><td>MEM (Memory Access)</td><td>Load/store data</td><td>Data memory, address calc</td></tr>
+                <tr><td>WB (Write Back)</td><td>Write result to register</td><td>Register file write port</td></tr>
+            </tbody>
+        </table>
+
+        <h3>15.3.2 Pipeline Timing</h3>
+        <p>With pipelining, a new instruction can start every cycle, even though each instruction takes 5 cycles to complete:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Pipeline execution timeline</span>
+Cycle:    1    2    3    4    5    6    7    8    9
+Inst 1:  [IF] [ID] [EX] [MEM][WB]
+Inst 2:       [IF] [ID] [EX] [MEM][WB]
+Inst 3:            [IF] [ID] [EX] [MEM][WB]
+Inst 4:                 [IF] [ID] [EX] [MEM][WB]
+Inst 5:                      [IF] [ID] [EX] [MEM][WB]
+
+<span class="comment">// Throughput: 1 instruction/cycle (after initial fill)</span>
+<span class="comment">// Latency: 5 cycles per instruction</span>
+</code>
+        </div>
+
+        <h3>15.3.3 Pipeline Hazards</h3>
+
+        <div class="warning-box">
+            <strong>Three Types of Hazards:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>Structural Hazards:</strong> Resource conflicts (two instructions need same unit)</li>
+                <li><strong>Data Hazards:</strong> Dependencies between instructions (RAW, WAR, WAW)</li>
+                <li><strong>Control Hazards:</strong> Branch decisions affect which instructions to fetch</li>
+            </ul>
+        </div>
+
+        <div class="code-block">
+<code><span class="comment">// Data Hazard Example (RAW - Read After Write)</span>
+ADD R1, R2, R3    <span class="comment">// Writes R1</span>
+SUB R4, R1, R5    <span class="comment">// Reads R1 - needs to wait!</span>
+
+<span class="comment">// Solutions:</span>
+<span class="comment">// 1. Stalling: Insert bubbles (slow)</span>
+<span class="comment">// 2. Forwarding: Bypass result directly (fast)</span>
+<span class="comment">// 3. Reordering: Execute independent instructions first</span>
+</code>
+        </div>
+
+        <h2>15.4 GPU vs CPU Microarchitecture</h2>
+
+        <p>GPUs and CPUs optimize for fundamentally different workloads:</p>
+
+        <div class="mermaid">
+graph TB
+    subgraph "CPU Philosophy"
+        A["Low Latency<br/>Fast single thread"]
+        A --> A1["Large caches"]
+        A --> A2["Branch prediction"]
+        A --> A3["Out-of-order exec"]
+        A --> A4["Speculation"]
+    end
+    
+    subgraph "GPU Philosophy"
+        B["High Throughput<br/>Many parallel threads"]
+        B --> B1["Many simple cores"]
+        B --> B2["Hide latency with threads"]
+        B --> B3["In-order execution"]
+        B --> B4["SIMT model"]
+    end
+    
+    style A fill:#e3f2fd
+    style B fill:#e8f5e9
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Aspect</th><th>CPU</th><th>GPU</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Cores</td><td>Few (4-64)</td><td>Many (1000s)</td></tr>
+                <tr><td>Threads per core</td><td>1-2 (SMT)</td><td>32-64 (warps)</td></tr>
+                <tr><td>Cache per core</td><td>Large (MB)</td><td>Small (KB)</td></tr>
+                <tr><td>Control logic</td><td>Complex (30% area)</td><td>Simple (5% area)</td></tr>
+                <tr><td>Branch handling</td><td>Prediction + speculation</td><td>SIMT divergence</td></tr>
+                <tr><td>Memory latency hiding</td><td>Large caches</td><td>Thread switching</td></tr>
+            </tbody>
+        </table>
+
+        <h2>15.5 tiny-gpu Microarchitecture Overview</h2>
+
+        <p>Let's examine tiny-gpu's microarchitecture as a concrete example:</p>
+
+        <div class="arch-diagram">
+            <div class="mermaid">
+graph TB
+    subgraph "tiny-gpu Top Level"
+        DCR["DCR<br/>Device Control"] --> DISPATCH["Dispatch<br/>Block scheduler"]
+        DISPATCH --> CORE0["Core 0"]
+        DISPATCH --> CORE1["Core 1"]
+        DISPATCH --> COREN["Core N..."]
+        
+        PMEM["Program Memory<br/>Controller"] --> CORE0
+        PMEM --> CORE1
+        PMEM --> COREN
+        
+        DMEM["Data Memory<br/>Controller"] --> CORE0
+        DMEM --> CORE1
+        DMEM --> COREN
+    end
+    
+    style DCR fill:#e3f2fd
+    style DISPATCH fill:#fff3e0
+    style CORE0 fill:#e8f5e9
+    style CORE1 fill:#e8f5e9
+    style COREN fill:#e8f5e9
+        </div>
+        </div>
+
+        <h3>15.5.1 Core Internal Structure</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "Single Core"
+        SCHED["Scheduler<br/>FSM: 6 states"]
+        FETCH["Fetcher"]
+        DEC["Decoder"]
+        
+        subgraph "Per-Thread Resources"
+            PC["PC × N"]
+            REG["Registers × N"]
+            ALU["ALU × N"]
+            LSU["LSU × N"]
+        end
+        
+        SCHED --> FETCH
+        SCHED --> DEC
+        SCHED --> PC
+        SCHED --> REG
+        SCHED --> ALU
+        SCHED --> LSU
+    end
+    
+    style SCHED fill:#fff3e0
+    style PC fill:#e8f5e9
+    style REG fill:#e8f5e9
+    style ALU fill:#e8f5e9
+    style LSU fill:#e8f5e9
+        </div>
+
+        <h3>15.5.2 Scheduler State Machine</h3>
+
+        <p>The scheduler orchestrates instruction execution through a 6-state FSM:</p>
+
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> FETCH
+    FETCH --> DECODE : instruction ready
+    DECODE --> REQUEST : operands decoded
+    REQUEST --> WAIT : memory request issued
+    WAIT --> EXECUTE : data ready
+    EXECUTE --> UPDATE : result computed
+    UPDATE --> FETCH : next instruction
+    UPDATE --> [*] : RET executed
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>State</th><th>Action</th><th>Duration</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>FETCH</td><td>Request instruction from program memory</td><td>1+ cycles</td></tr>
+                <tr><td>DECODE</td><td>Parse opcode, determine operation</td><td>1 cycle</td></tr>
+                <tr><td>REQUEST</td><td>Issue memory read/write if needed</td><td>1 cycle</td></tr>
+                <tr><td>WAIT</td><td>Wait for memory response</td><td>Variable</td></tr>
+                <tr><td>EXECUTE</td><td>Perform ALU operation</td><td>1 cycle</td></tr>
+                <tr><td>UPDATE</td><td>Write results, update PC</td><td>1 cycle</td></tr>
+            </tbody>
+        </table>
+
+        <h2>15.6 Memory Hierarchy</h2>
+
+        <h3>15.6.1 GPU Memory Hierarchy</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "Fast/Small"
+        REG["Registers<br/>~1 cycle, KB per thread"]
+        SHARED["Shared Memory<br/>~5 cycles, 64-256 KB"]
+    end
+    
+    subgraph "Slow/Large"
+        L1["L1 Cache<br/>~20 cycles, 32-128 KB"]
+        L2["L2 Cache<br/>~100 cycles, 2-6 MB"]
+        GLOBAL["Global Memory (DRAM)<br/>~400 cycles, 8-80 GB"]
+    end
+    
+    REG --> SHARED
+    SHARED --> L1
+    L1 --> L2
+    L2 --> GLOBAL
+    
+    style REG fill:#c8e6c9
+    style SHARED fill:#a5d6a7
+    style L1 fill:#fff3e0
+    style L2 fill:#ffe0b2
+    style GLOBAL fill:#ffccbc
+        </div>
+
+        <h3>15.6.2 tiny-gpu Memory Model</h3>
+        <p>tiny-gpu has a simplified memory hierarchy:</p>
+
+        <div class="info-box">
+            <strong>tiny-gpu Memory:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>Registers:</strong> 16 per thread (R0-R15), single-cycle access</li>
+                <li><strong>Program Memory:</strong> 256 × 16-bit instructions, 1 read channel</li>
+                <li><strong>Data Memory:</strong> 256 × 8-bit values, 4 read/write channels</li>
+                <li><strong>No cache hierarchy</strong> (direct memory access)</li>
+            </ul>
+        </div>
+
+        <h2>15.7 Control Flow in GPUs</h2>
+
+        <h3>15.7.1 SIMT Execution Model</h3>
+        <p>GPUs use Single Instruction, Multiple Threads (SIMT):</p>
+
+        <div class="code-block">
+<code><span class="comment">// All threads in a warp execute the same instruction</span>
+<span class="comment">// but on different data (different register values)</span>
+
+<span class="comment">// Example: 32 threads execute ADD simultaneously</span>
+Thread 0:  ADD R1, R2, R3   <span class="comment">// R1_0 = R2_0 + R3_0</span>
+Thread 1:  ADD R1, R2, R3   <span class="comment">// R1_1 = R2_1 + R3_1</span>
+Thread 2:  ADD R1, R2, R3   <span class="comment">// R1_2 = R2_2 + R3_2</span>
+...
+Thread 31: ADD R1, R2, R3   <span class="comment">// R1_31 = R2_31 + R3_31</span>
+</code>
+        </div>
+
+        <h3>15.7.2 Handling Divergence</h3>
+        <p>When threads take different paths, the GPU must handle <strong>divergence</strong>:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Divergent code example</span>
+<span class="keyword">if</span> (threadIdx.x % <span class="number">2</span> == <span class="number">0</span>) {
+    result = a + b;    <span class="comment">// Even threads</span>
+} <span class="keyword">else</span> {
+    result = a - b;    <span class="comment">// Odd threads</span>
+}
+
+<span class="comment">// Execution (masked):</span>
+<span class="comment">// Step 1: Execute 'then' branch with even threads active</span>
+<span class="comment">//         Odd threads masked (do nothing)</span>
+<span class="comment">// Step 2: Execute 'else' branch with odd threads active</span>
+<span class="comment">//         Even threads masked (do nothing)</span>
+<span class="comment">// Total: 2x the work of uniform execution</span>
+</code>
+        </div>
+
+        <h2>15.8 Performance Metrics</h2>
+
+        <h3>15.8.1 Key Metrics</h3>
+
+        <table>
+            <thead>
+                <tr><th>Metric</th><th>Formula</th><th>Target</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>IPC (Instructions Per Cycle)</td><td>Instructions ÷ Cycles</td><td>Close to peak (e.g., 4 for 4-wide issue)</td></tr>
+                <tr><td>Occupancy</td><td>Active Warps ÷ Max Warps</td><td>50-100% for latency hiding</td></tr>
+                <tr><td>Memory Bandwidth Utilization</td><td>Achieved BW ÷ Peak BW</td><td>>70% for memory-bound kernels</td></tr>
+                <tr><td>Compute Utilization</td><td>Active Cycles ÷ Total Cycles</td><td>>80% for compute-bound kernels</td></tr>
+            </tbody>
+        </table>
+
+        <h3>15.8.2 Amdahl's Law</h3>
+        <p>Maximum speedup is limited by the sequential portion:</p>
+
+        <div class="code-block">
+<code><span class="comment">// Amdahl's Law</span>
+Speedup = 1 / ((1 - P) + P/N)
+
+<span class="comment">// Where:</span>
+<span class="comment">//   P = fraction that can be parallelized</span>
+<span class="comment">//   N = number of parallel processors</span>
+
+<span class="comment">// Example: 90% parallelizable, 1000 cores</span>
+Speedup = 1 / (0.1 + 0.9/1000) = 1 / 0.1009 ≈ 9.9×
+
+<span class="comment">// Even with infinite cores: max speedup = 10× (limited by 10% serial)</span>
+</code>
+        </div>
+
+        <h2>15.9 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 15.1: Pipeline Analysis</h4>
+            <p>Given tiny-gpu's 6-stage scheduler (FETCH→DECODE→REQUEST→WAIT→EXECUTE→UPDATE):</p>
+            <ol>
+                <li>How many cycles does it take to execute 10 instructions assuming no stalls?</li>
+                <li>What is the steady-state throughput in instructions per cycle?</li>
+                <li>What is the latency of a single instruction?</li>
+            </ol>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p><strong>Note:</strong> tiny-gpu doesn't pipeline instructions (it's a simple FSM that completes one instruction before starting the next).</p>
+                    <p>1. Assuming minimal stalls: 10 instructions × 6 cycles = 60 cycles minimum</p>
+                    <p>2. Throughput: 1 instruction per 6 cycles = 0.167 IPC</p>
+                    <p>3. Latency: 6 cycles (plus memory wait time)</p>
+                    <p><em>In a true pipelined design, you could achieve 1 IPC after initial fill.</em></p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 15.2: Memory Hierarchy Impact</h4>
+            <p>A kernel accesses 1 MB of data. Calculate execution time for:</p>
+            <ol>
+                <li>All data in registers (1 cycle access)</li>
+                <li>All data in shared memory (5 cycle access)</li>
+                <li>All data in global memory (400 cycle access)</li>
+            </ol>
+            <p>Assume 1 GHz clock and 4-byte accesses.</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Number of accesses: 1 MB ÷ 4 bytes = 262,144 accesses</p>
+                    <p>1. Registers: 262,144 × 1 cycle = 262,144 cycles = 0.26 ms</p>
+                    <p>2. Shared memory: 262,144 × 5 = 1.31 million cycles = 1.31 ms</p>
+                    <p>3. Global memory: 262,144 × 400 = 104.9 million cycles = 104.9 ms</p>
+                    <p><strong>Insight:</strong> 400× difference between fastest and slowest!</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 15.3: Amdahl's Law Application</h4>
+            <p>A kernel has 5% sequential overhead (initialization, reduction). Calculate:</p>
+            <ol>
+                <li>Maximum theoretical speedup with infinite parallel cores</li>
+                <li>Speedup with 64 cores (like tiny-gpu with 8 threads × 8 blocks)</li>
+                <li>What percentage parallelization needed for 50× speedup with 64 cores?</li>
+            </ol>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>1. With P = 0.95, infinite N: Speedup = 1 / (1 - 0.95) = 20×</p>
+                    <p>2. With 64 cores: Speedup = 1 / (0.05 + 0.95/64) = 1 / 0.0648 = 15.4×</p>
+                    <p>3. For 50× speedup: 50 = 1 / ((1-P) + P/64)<br/>
+                       Solving: P = 0.9877 (98.77% must be parallelizable)</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>15.10 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🏗️ Microarchitecture is the "how":</strong> While the ISA defines what instructions exist, microarchitecture defines how they're implemented with pipelines, caches, and control logic.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>⚡ Pipelining increases throughput:</strong> By overlapping instruction execution, pipelines can approach 1 instruction per cycle (IPC) throughput, despite multi-cycle latency.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔄 GPUs trade latency for throughput:</strong> Unlike CPUs that optimize for single-thread performance, GPUs use massive parallelism to hide latency and maximize throughput.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📊 Memory hierarchy dominates performance:</strong> The gap between register access (1 cycle) and global memory (400+ cycles) makes memory optimization crucial.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📐 Amdahl's Law limits parallelism:</strong> Even small sequential portions severely limit potential speedup. Always minimize serial code paths.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-14.html">← Previous: Testing and Verification</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-16.html">Next →</a>
+            <a href="chapter-16.html">Next: RTL Fundamentals →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

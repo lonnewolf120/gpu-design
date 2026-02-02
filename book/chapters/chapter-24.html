@@ -1,40 +1,392 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 24: Tape-Out and Manufacturing | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .keyword { color: #569cd6; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .timeline { position: relative; padding: 20px 0; }
+        .timeline-item { display: flex; margin: 20px 0; }
+        .timeline-marker { width: 30px; height: 30px; background: #667eea; border-radius: 50%; margin-right: 20px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0; }
+        .timeline-content { background: #f5f5f5; padding: 15px; border-radius: 8px; flex-grow: 1; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-23.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-23.html">← Previous: Design Signoff</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-25.html">Next →</a>
+            <a href="chapter-25.html">Next: Future of GPU Design →</a>
         </div>
 
         <h1>Chapter 24: Tape-Out and Manufacturing</h1>
-        <div style="color: #999; margin: 20px 0;">V: Physical Design & Manufacturing • Reading time: ~60 min</div>
-        
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Tape-Out and Manufacturing</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part VI: Chip Fabrication</span>
+            <span>Reading time: ~55 minutes</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-23.html">← Previous</a>
+        <h2>Introduction</h2>
+        <p>"Tape-out" is the moment when a chip design is finalized and sent to the foundry for manufacturing. This term dates back to when designs were shipped on magnetic tape. Today, it's the culmination of months or years of design work.</p>
+
+        <h2>24.1 The Tape-Out Process</h2>
+
+        <div class="mermaid">
+graph LR
+    DESIGN["Design<br/>Complete"] --> SIGNOFF["Signoff<br/>Clean"]
+    SIGNOFF --> FINAL["Final<br/>Checks"]
+    FINAL --> SUBMIT["Submit<br/>GDSII"]
+    SUBMIT --> FOUNDRY["Foundry<br/>Receives"]
+    
+    style DESIGN fill:#e3f2fd
+    style SIGNOFF fill:#fff3e0
+    style SUBMIT fill:#e8f5e9
+    style FOUNDRY fill:#f3e5f5
+        </div>
+
+        <h3>24.1.1 Tape-Out Checklist</h3>
+
+        <table>
+            <thead>
+                <tr><th>Category</th><th>Items</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Design Files</td><td>GDSII, LEF, netlists, SDC constraints</td></tr>
+                <tr><td>Signoff Reports</td><td>DRC, LVS, STA (all corners), EM, IR drop</td></tr>
+                <tr><td>Documentation</td><td>Pin descriptions, power specs, test plan</td></tr>
+                <tr><td>Verification</td><td>Formal proof, simulation coverage, BIST results</td></tr>
+            </tbody>
+        </table>
+
+        <h2>24.2 Shuttle Programs</h2>
+
+        <p>Multi-project wafers (MPW) or "shuttle" programs share wafer costs among multiple designs:</p>
+
+        <div class="info-box">
+            <h4>Popular Shuttle Programs</h4>
+            <ul>
+                <li><strong>Google/Efabless Open MPW:</strong> Free fabrication for open-source designs on Sky130</li>
+                <li><strong>Europractice:</strong> Academic access to multiple foundries</li>
+                <li><strong>MOSIS:</strong> Educational IC fabrication services</li>
+                <li><strong>TinyTapeout:</strong> Shared ASIC runs for hobbyists</li>
+            </ul>
+        </div>
+
+        <h3>24.2.1 Open MPW Timeline</h3>
+
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-marker">1</div>
+                <div class="timeline-content">
+                    <strong>Submit Design</strong>
+                    <p>Upload GDSII to Efabless platform, run precheck</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">2</div>
+                <div class="timeline-content">
+                    <strong>Review Period (2-4 weeks)</strong>
+                    <p>Foundry-level DRC, merging with other designs</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">3</div>
+                <div class="timeline-content">
+                    <strong>Fabrication (8-12 weeks)</strong>
+                    <p>Wafer processing at SkyWater foundry</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">4</div>
+                <div class="timeline-content">
+                    <strong>Packaging (2-4 weeks)</strong>
+                    <p>Dice wafer, wire bond, package chips</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">5</div>
+                <div class="timeline-content">
+                    <strong>Delivery</strong>
+                    <p>Receive packaged chips for testing</p>
+                </div>
+            </div>
+        </div>
+
+        <h2>24.3 Semiconductor Manufacturing</h2>
+
+        <h3>24.3.1 Wafer Processing</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "Front-End (FEOL)"
+        WAFER["Silicon<br/>Wafer"] --> OXID["Oxidation"]
+        OXID --> PHOTO1["Photolithography"]
+        PHOTO1 --> IMPLANT["Ion<br/>Implantation"]
+        IMPLANT --> TRANS["Transistors<br/>Formed"]
+    end
+    
+    subgraph "Back-End (BEOL)"
+        TRANS --> DEP["Metal<br/>Deposition"]
+        DEP --> PHOTO2["Patterning"]
+        PHOTO2 --> ETCH["Etching"]
+        ETCH --> WIRE["Interconnects<br/>Complete"]
+    end
+    
+    style WAFER fill:#795548,color:white
+    style TRANS fill:#4caf50,color:white
+    style WIRE fill:#2196f3,color:white
+        </div>
+
+        <h3>24.3.2 Photolithography</h3>
+
+        <p>Photolithography transfers patterns from masks to wafer:</p>
+
+        <ol>
+            <li><strong>Coat:</strong> Apply photoresist to wafer</li>
+            <li><strong>Expose:</strong> Shine UV light through mask</li>
+            <li><strong>Develop:</strong> Remove exposed (or unexposed) resist</li>
+            <li><strong>Etch/Deposit:</strong> Transfer pattern to wafer layers</li>
+            <li><strong>Strip:</strong> Remove remaining photoresist</li>
+        </ol>
+
+        <h3>24.3.3 Process Nodes</h3>
+
+        <table>
+            <thead>
+                <tr><th>Node</th><th>Year</th><th>Gate Length</th><th>Example Products</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>130nm (Sky130)</td><td>2001</td><td>130nm</td><td>Open-source PDK, IoT</td></tr>
+                <tr><td>28nm</td><td>2011</td><td>28nm</td><td>Older GPUs, MCUs</td></tr>
+                <tr><td>7nm</td><td>2018</td><td>~10nm (FinFET)</td><td>RTX 20 series, Zen 2</td></tr>
+                <tr><td>5nm</td><td>2020</td><td>~25nm (GAA)</td><td>Apple M1, RTX 30</td></tr>
+                <tr><td>3nm</td><td>2022</td><td>~12nm (GAA)</td><td>A17, RTX 40</td></tr>
+            </tbody>
+        </table>
+
+        <div class="warning-box">
+            <strong>⚠️ Node Names Are Marketing:</strong> "5nm" doesn't mean 5nm gate length. Modern nodes use FinFET or GAA transistors with complex 3D structures.
+        </div>
+
+        <h2>24.4 Packaging</h2>
+
+        <h3>24.4.1 Package Types</h3>
+
+        <table>
+            <thead>
+                <tr><th>Package</th><th>I/O Count</th><th>Use Case</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>QFN (Quad Flat No-lead)</td><td>8-100</td><td>Small MCUs, sensors</td></tr>
+                <tr><td>QFP (Quad Flat Pack)</td><td>32-256</td><td>Standard ICs</td></tr>
+                <tr><td>BGA (Ball Grid Array)</td><td>100-1000+</td><td>Processors, FPGAs</td></tr>
+                <tr><td>Chiplet/CoWoS</td><td>Thousands</td><td>High-end GPUs, HBM</td></tr>
+            </tbody>
+        </table>
+
+        <h3>24.4.2 Wire Bonding vs Flip-Chip</h3>
+
+        <div class="mermaid">
+graph TB
+    subgraph "Wire Bonding"
+        DIE1["Die"] --- WIRE1["Gold Wire"]
+        WIRE1 --- PAD1["Package Pad"]
+    end
+    
+    subgraph "Flip-Chip"
+        DIE2["Die<br/>(face-down)"] --- BUMP["Solder Bumps"]
+        BUMP --- PAD2["Package Substrate"]
+    end
+        </div>
+
+        <h2>24.5 Testing</h2>
+
+        <h3>24.5.1 Wafer Probe Testing</h3>
+
+        <p>Before dicing, each die is tested on the wafer:</p>
+
+        <ul>
+            <li><strong>Continuity tests:</strong> Check power/ground shorts</li>
+            <li><strong>Functional tests:</strong> Basic operation</li>
+            <li><strong>Speed binning:</strong> Sort by maximum frequency</li>
+        </ul>
+
+        <h3>24.5.2 Final Testing</h3>
+
+        <p>After packaging, comprehensive tests determine yield:</p>
+
+        <div class="code-block">
+<code><span class="comment"># Test categories</span>
+1. DC Tests      - Power consumption, leakage
+2. AC Tests      - Timing, frequency limits
+3. Functional    - Full operation at speed
+4. Burn-in       - Accelerated aging (optional)
+5. Final QA      - Sample inspection
+</code>
+        </div>
+
+        <h2>24.6 Yield and Cost</h2>
+
+        <h3>24.6.1 Die Yield Formula</h3>
+
+        <p>Yield = $e^{-D \cdot A}$ where:</p>
+        <ul>
+            <li>$D$ = defect density (defects/cm²)</li>
+            <li>$A$ = die area (cm²)</li>
+        </ul>
+
+        <div class="info-box">
+            <strong>Example:</strong> With D = 0.5 defects/cm² and A = 1 cm²:
+            <br>Yield = e<sup>-0.5</sup> ≈ 60%
+            <br><br>
+            This is why large GPUs (like NVIDIA's H100 at ~800mm²) are expensive—lower yield means fewer good chips per wafer.
+        </div>
+
+        <h3>24.6.2 Cost Breakdown</h3>
+
+        <table>
+            <thead>
+                <tr><th>Cost Component</th><th>Typical %</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Wafer Processing</td><td>40-50%</td><td>Depends on node</td></tr>
+                <tr><td>Mask Set</td><td>10-20%</td><td>One-time, amortized</td></tr>
+                <tr><td>Packaging</td><td>10-20%</td><td>Advanced packaging costly</td></tr>
+                <tr><td>Testing</td><td>5-10%</td><td>More for high-reliability</td></tr>
+                <tr><td>Yield Loss</td><td>10-30%</td><td>Defective dies</td></tr>
+            </tbody>
+        </table>
+
+        <h2>24.7 From GDS to Chip</h2>
+
+        <p>If you submit tiny-gpu to Open MPW:</p>
+
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-marker">📁</div>
+                <div class="timeline-content">
+                    <strong>Your GDS (gds/1/gpu.gds)</strong>
+                    <p>~1MB of geometric data defining every layer</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">🔲</div>
+                <div class="timeline-content">
+                    <strong>Merged with Other Designs</strong>
+                    <p>Multiple projects tiled on shared reticle</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">⚙️</div>
+                <div class="timeline-content">
+                    <strong>Mask Creation</strong>
+                    <p>~40 masks for Sky130 process</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">💿</div>
+                <div class="timeline-content">
+                    <strong>Wafer Fabrication</strong>
+                    <p>~500 process steps over 8-12 weeks</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">🔧</div>
+                <div class="timeline-content">
+                    <strong>Packaging</strong>
+                    <p>QFN package with wire bonds</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker">📦</div>
+                <div class="timeline-content">
+                    <strong>Delivery</strong>
+                    <p>~100 chips in tubes or trays</p>
+                </div>
+            </div>
+        </div>
+
+        <h2>24.8 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 24.1: Yield Calculation</h4>
+            <p>A wafer is 300mm diameter. Your chip is 4mm × 4mm. With defect density of 0.3/cm², how many good chips per wafer?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Die area = 0.16 cm²</p>
+                    <p>Yield = e<sup>-0.3 × 0.16</sup> = e<sup>-0.048</sup> ≈ 95.3%</p>
+                    <p>Wafer area = π × 15² ≈ 707 cm²</p>
+                    <p>Max dies ≈ 707 / 0.16 ≈ 4418 (accounting for edge loss: ~3500)</p>
+                    <p>Good dies = 3500 × 0.953 ≈ 3335</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 24.2: Cost Analysis</h4>
+            <p>A 300mm wafer costs $10,000. Using the yield from Exercise 24.1, what is the cost per good die?</p>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p>Cost per good die = $10,000 / 3335 ≈ $3.00</p>
+                    <p>Add packaging (~$0.50) and testing (~$0.20) = ~$3.70 per chip</p>
+                </div>
+            </details>
+        </div>
+
+        <h2>24.9 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>📤 Tape-out is the finish line:</strong> Months of design culminate in a GDSII submission to the foundry.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🤝 Shuttle programs democratize access:</strong> Open MPW and similar programs let individuals build real chips.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🏭 Manufacturing is complex:</strong> Hundreds of process steps transform GDSII into silicon.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📊 Yield determines economics:</strong> Large dies = lower yield = higher cost per working chip.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-23.html">← Previous: Design Signoff</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-25.html">Next →</a>
+            <a href="chapter-25.html">Next: Future of GPU Design →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

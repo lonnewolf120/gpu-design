@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chapter 5: Instruction Set Architecture (ISA) | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <style>
         .chapter-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
         .chapter-nav { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: var(--panel); border-radius: var(--radius); }
@@ -14,9 +15,11 @@
         .exercise { background: #fff3e0; border-left: 4px solid #ff9800; padding: 16px; margin: 24px 0; }
         .engineer-note { background: #f3e5f5; border-left: 4px solid #9c27b0; padding: 16px; margin: 24px 0; }
         .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .mermaid { background: transparent; text-align: center; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         th { background: #f5f5f5; font-weight: bold; }
+        .instruction-format { font-family: monospace; background: #f1f5f9; padding: 20px; border-radius: 8px; text-align: center; }
     </style>
 </head>
 <body>
@@ -37,33 +40,36 @@
         <h2>Introduction</h2>
         <p>
             The <strong>Instruction Set Architecture (ISA)</strong> is the contract between software and hardware. 
-            It defines:
-        </p>
-        <ul>
-            <li>What instructions the GPU can execute</li>
-            <li>How instructions are encoded (bit patterns)</li>
-            <li>What registers are available</li>
-            <li>How memory is accessed</li>
-            <li>How exceptions/interrupts are handled</li>
-        </ul>
-
-        <p>
-            A well-designed ISA makes software simple to write and hardware efficient to implement. A poorly designed 
-            ISA creates headaches for both compiler writers and chip designers.
+            It defines what instructions the GPU can execute, how they're encoded, and what registers are available.
         </p>
 
         <div class="key-takeaway">
             <strong>Why ISA Matters:</strong> Once you tape out silicon with an ISA, you're stuck with it forever 
-            (for backward compatibility). Companies spend years designing ISAs. We'll design a practical, minimal GPU ISA 
-            inspired by real architectures like NVIDIA PTX, AMD GCN, and RISC-V.
+            for backward compatibility. We'll design a practical, minimal GPU ISA inspired by NVIDIA PTX, AMD GCN, and RISC-V.
         </div>
 
         <h2>5.1 ISA Design Principles</h2>
 
-        <h3>RISC vs CISC (for GPUs)</h3>
-        <p>
-            Most GPU ISAs follow RISC (Reduced Instruction Set Computer) principles:
-        </p>
+        <div class="figure">
+            <div class="mermaid">
+mindmap
+    root((ISA Design<br/>Principles))
+        RISC Philosophy
+            Simple instructions
+            Fixed-length encoding
+            Load/Store architecture
+        GPU Specific
+            SIMT execution
+            Thread-local registers
+            Predication support
+            Atomic operations
+        Performance
+            Large register set
+            Orthogonal operations
+            Efficient encoding
+            </div>
+            <div class="figure-caption">Figure 5.1: Key ISA design principles for GPUs</div>
+        </div>
 
         <table>
             <thead>
@@ -77,79 +83,93 @@
                 <tr>
                     <td><strong>Simple instructions</strong></td>
                     <td>Each instruction does one thing</td>
-                    <td>Easier to pipeline, faster clock</td>
+                    <td>Easier to pipeline</td>
                 </tr>
                 <tr>
                     <td><strong>Load/store architecture</strong></td>
                     <td>Only LOAD/STORE access memory</td>
-                    <td>Clean separation of compute and memory</td>
+                    <td>Clean separation</td>
                 </tr>
                 <tr>
                     <td><strong>Fixed-length instructions</strong></td>
-                    <td>All instructions same bit width (e.g., 32-bit)</td>
-                    <td>Simpler fetch and decode</td>
+                    <td>All instructions same bit width</td>
+                    <td>Simpler decode</td>
                 </tr>
                 <tr>
                     <td><strong>Large register set</strong></td>
-                    <td>Many registers to avoid memory access</td>
-                    <td>Higher performance, less memory traffic</td>
-                </tr>
-                <tr>
-                    <td><strong>Orthogonal operations</strong></td>
-                    <td>Operations work on any register</td>
-                    <td>Simpler compiler, more flexible</td>
+                    <td>Many registers to avoid memory</td>
+                    <td>Higher performance</td>
                 </tr>
             </tbody>
         </table>
 
-        <h3>GPU-Specific Considerations</h3>
-        <p>
-            GPUs have unique requirements:
-        </p>
-        <ul>
-            <li><strong>SIMT execution:</strong> Instructions must work across 32/64 threads simultaneously</li>
-            <li><strong>Predication:</strong> Support for conditional execution without branching</li>
-            <li><strong>Thread-local registers:</strong> Special registers for thread ID, block ID</li>
-            <li><strong>Atomic operations:</strong> For synchronization across thousands of threads</li>
-            <li><strong>Texture/surface operations:</strong> (For graphics GPUs) Specialized image access</li>
-        </ul>
-
         <h2>5.2 Our GPU ISA: TinyGPU-ISA</h2>
 
         <p>
-            Let's design a minimal but complete ISA for our GPU. We'll call it <strong>TinyGPU-ISA</strong>. 
-            It will have:
+            We'll design <strong>TinyGPU-ISA</strong> with:
         </p>
         <ul>
             <li>16-bit instruction encoding (compact, easy to implement)</li>
-            <li>16 general-purpose registers (R0-R12 are writable, R13-R15 are read-only special registers)</li>
+            <li>16 registers (R0-R12 writable, R13-R15 read-only special)</li>
             <li>11 core instructions</li>
-            <li>Support for arithmetic, logic, memory, and control flow</li>
         </ul>
 
         <h3>Instruction Format</h3>
 
-        <p>
-            We'll use a single 16-bit instruction format:
-        </p>
-
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 13px;">
-Instruction Format (16 bits total):
-┌────────┬────────┬────────┬────────┐
-│ OPCODE │  DST   │  SRC1  │  SRC2  │
-│ [15:12]│ [11:8] │ [7:4]  │ [3:0]  │
-│ 4 bits │ 4 bits │ 4 bits │ 4 bits │
-└────────┴────────┴────────┴────────┘
+            <div class="mermaid">
+block-beta
+    columns 16
+    
+    block:OP["OPCODE"]:4
+        O0["15"] O1["14"] O2["13"] O3["12"]
+    end
+    
+    block:DST["DST"]:4
+        D0["11"] D1["10"] D2["9"] D3["8"]
+    end
+    
+    block:SRC1["SRC1"]:4
+        S10["7"] S11["6"] S12["5"] S13["4"]
+    end
+    
+    block:SRC2["SRC2"]:4
+        S20["3"] S21["2"] S22["1"] S23["0"]
+    end
+    
+    style OP fill:#dbeafe,stroke:#3b82f6
+    style DST fill:#dcfce7,stroke:#22c55e
+    style SRC1 fill:#fef3c7,stroke:#f59e0b
+    style SRC2 fill:#fce7f3,stroke:#ec4899
+            </div>
+            <div class="figure-caption">Figure 5.2: 16-bit instruction format — OPCODE | DST | SRC1 | SRC2</div>
+        </div>
 
-OPCODE: Which operation (ADD, SUB, LOAD, etc.)
-DST:    Destination register (R0-R15)
-SRC1:   First source register
-SRC2:   Second source register (or immediate value)</pre>
-            <div class="figure-caption">Figure 5.1: 16-bit instruction format</div>
+        <div class="instruction-format">
+            <strong>Format:</strong> OPCODE[15:12] | DST[11:8] | SRC1[7:4] | SRC2[3:0]<br>
+            <em>Example:</em> ADD R1, R2, R3 → 0x0123
         </div>
 
         <h3>Register Set</h3>
+
+        <div class="figure">
+            <div class="mermaid">
+flowchart LR
+    subgraph GP["General Purpose (Read/Write)"]
+        R0["R0"] ~~~ R1["R1"] ~~~ R2["..."] ~~~ R12["R12"]
+    end
+    
+    subgraph SPECIAL["Special (Read-Only)"]
+        R13["R13<br/>%threadIdx"]
+        R14["R14<br/>%blockDim"]
+        R15["R15<br/>%blockIdx"]
+    end
+    
+    style GP fill:#dcfce7,stroke:#22c55e
+    style SPECIAL fill:#fef3c7,stroke:#f59e0b
+            </div>
+            <div class="figure-caption">Figure 5.3: Register set — 13 general purpose + 3 special</div>
+        </div>
 
         <table>
             <thead>
@@ -161,802 +181,288 @@ SRC2:   Second source register (or immediate value)</pre>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>R0-R12</td>
-                    <td>General Purpose</td>
-                    <td>Computation, temporary values</td>
-                    <td>Read/Write</td>
-                </tr>
-                <tr>
-                    <td>R13</td>
-                    <td>%threadIdx</td>
-                    <td>Thread index within block (0-31 for warp size 32)</td>
-                    <td>Read-only</td>
-                </tr>
-                <tr>
-                    <td>R14</td>
-                    <td>%blockDim</td>
-                    <td>Block dimension (threads per block)</td>
-                    <td>Read-only</td>
-                </tr>
-                <tr>
-                    <td>R15</td>
-                    <td>%blockIdx</td>
-                    <td>Block index within grid</td>
-                    <td>Read-only</td>
-                </tr>
+                <tr><td>R0-R12</td><td>General Purpose</td><td>Computation</td><td>Read/Write</td></tr>
+                <tr><td>R13</td><td>%threadIdx</td><td>Thread index within block</td><td>Read-only</td></tr>
+                <tr><td>R14</td><td>%blockDim</td><td>Block dimension</td><td>Read-only</td></tr>
+                <tr><td>R15</td><td>%blockIdx</td><td>Block index within grid</td><td>Read-only</td></tr>
             </tbody>
         </table>
-
-        <div class="engineer-note">
-            <strong>Design Choice:</strong> Read-only special registers are hardwired in hardware. When the decoder 
-            sees R13, it doesn't read from the register file — it directly provides the thread ID from a counter. 
-            This saves register file space!
-        </div>
 
         <h2>5.3 Instruction Set Specification</h2>
 
         <h3>Arithmetic Instructions</h3>
-
         <table>
             <thead>
-                <tr>
-                    <th>Mnemonic</th>
-                    <th>Opcode</th>
-                    <th>Syntax</th>
-                    <th>Operation</th>
-                    <th>Description</th>
-                </tr>
+                <tr><th>Mnemonic</th><th>Opcode</th><th>Operation</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><code>ADD</code></td>
-                    <td>0x0</td>
-                    <td><code>ADD Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 + Rs2</code></td>
-                    <td>32-bit integer addition</td>
-                </tr>
-                <tr>
-                    <td><code>SUB</code></td>
-                    <td>0x1</td>
-                    <td><code>SUB Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 - Rs2</code></td>
-                    <td>32-bit integer subtraction</td>
-                </tr>
-                <tr>
-                    <td><code>MUL</code></td>
-                    <td>0x2</td>
-                    <td><code>MUL Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 * Rs2</code></td>
-                    <td>32-bit integer multiplication (low 32 bits)</td>
-                </tr>
-                <tr>
-                    <td><code>SLT</code></td>
-                    <td>0x3</td>
-                    <td><code>SLT Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = (Rs1 < Rs2) ? 1 : 0</code></td>
-                    <td>Set less than (signed)</td>
-                </tr>
+                <tr><td><code>ADD</code></td><td>0x0</td><td>Rd = Rs1 + Rs2</td><td>32-bit integer addition</td></tr>
+                <tr><td><code>SUB</code></td><td>0x1</td><td>Rd = Rs1 - Rs2</td><td>32-bit integer subtraction</td></tr>
+                <tr><td><code>MUL</code></td><td>0x2</td><td>Rd = Rs1 * Rs2</td><td>32-bit multiplication (low 32 bits)</td></tr>
+                <tr><td><code>SLT</code></td><td>0x3</td><td>Rd = (Rs1 &lt; Rs2) ? 1 : 0</td><td>Set less than (signed)</td></tr>
             </tbody>
         </table>
 
         <h3>Logical Instructions</h3>
-
         <table>
             <thead>
-                <tr>
-                    <th>Mnemonic</th>
-                    <th>Opcode</th>
-                    <th>Syntax</th>
-                    <th>Operation</th>
-                    <th>Description</th>
-                </tr>
+                <tr><th>Mnemonic</th><th>Opcode</th><th>Operation</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><code>AND</code></td>
-                    <td>0x4</td>
-                    <td><code>AND Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 & Rs2</code></td>
-                    <td>Bitwise AND</td>
-                </tr>
-                <tr>
-                    <td><code>OR</code></td>
-                    <td>0x5</td>
-                    <td><code>OR Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 | Rs2</code></td>
-                    <td>Bitwise OR</td>
-                </tr>
-                <tr>
-                    <td><code>XOR</code></td>
-                    <td>0x6</td>
-                    <td><code>XOR Rd, Rs1, Rs2</code></td>
-                    <td><code>Rd = Rs1 ^ Rs2</code></td>
-                    <td>Bitwise XOR</td>
-                </tr>
+                <tr><td><code>AND</code></td><td>0x4</td><td>Rd = Rs1 &amp; Rs2</td><td>Bitwise AND</td></tr>
+                <tr><td><code>OR</code></td><td>0x5</td><td>Rd = Rs1 | Rs2</td><td>Bitwise OR</td></tr>
+                <tr><td><code>XOR</code></td><td>0x6</td><td>Rd = Rs1 ^ Rs2</td><td>Bitwise XOR</td></tr>
             </tbody>
         </table>
 
         <h3>Memory Instructions</h3>
-
         <table>
             <thead>
-                <tr>
-                    <th>Mnemonic</th>
-                    <th>Opcode</th>
-                    <th>Syntax</th>
-                    <th>Operation</th>
-                    <th>Description</th>
-                </tr>
+                <tr><th>Mnemonic</th><th>Opcode</th><th>Operation</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><code>LOAD</code></td>
-                    <td>0x7</td>
-                    <td><code>LOAD Rd, Rs1, offset</code></td>
-                    <td><code>Rd = Memory[Rs1 + offset]</code></td>
-                    <td>Load 32-bit word from memory</td>
-                </tr>
-                <tr>
-                    <td><code>STORE</code></td>
-                    <td>0x8</td>
-                    <td><code>STORE Rs2, Rs1, offset</code></td>
-                    <td><code>Memory[Rs1 + offset] = Rs2</code></td>
-                    <td>Store 32-bit word to memory</td>
-                </tr>
+                <tr><td><code>LOAD</code></td><td>0x7</td><td>Rd = Memory[Rs1 + offset]</td><td>Load 32-bit word</td></tr>
+                <tr><td><code>STORE</code></td><td>0x8</td><td>Memory[Rs1 + offset] = Rs2</td><td>Store 32-bit word</td></tr>
             </tbody>
         </table>
-
-        <div class="engineer-note">
-            <strong>Note:</strong> In our 16-bit encoding, the offset is embedded in the SRC2 field (4 bits = 0-15). 
-            For larger offsets, use ADD to compute the address first.
-        </div>
 
         <h3>Control Flow Instructions</h3>
-
         <table>
             <thead>
-                <tr>
-                    <th>Mnemonic</th>
-                    <th>Opcode</th>
-                    <th>Syntax</th>
-                    <th>Operation</th>
-                    <th>Description</th>
-                </tr>
+                <tr><th>Mnemonic</th><th>Opcode</th><th>Operation</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><code>BRnzp</code></td>
-                    <td>0x9</td>
-                    <td><code>BRnzp n, z, p, offset</code></td>
-                    <td>Branch if condition flags match</td>
-                    <td>Conditional branch (LC-3 style)</td>
-                </tr>
-                <tr>
-                    <td><code>SYNC</code></td>
-                    <td>0xA</td>
-                    <td><code>SYNC</code></td>
-                    <td>Wait for all threads in block</td>
-                    <td>Block-level synchronization barrier</td>
-                </tr>
+                <tr><td><code>BRnzp</code></td><td>0x9</td><td>Branch if condition flags match</td><td>Conditional branch</td></tr>
+                <tr><td><code>SYNC</code></td><td>0xA</td><td>Wait for all threads in block</td><td>Barrier synchronization</td></tr>
             </tbody>
         </table>
 
-        <h3>Condition Flags (for BRnzp)</h3>
-
-        <p>
-            Every arithmetic/logical instruction updates condition flags:
-        </p>
-        <ul>
-            <li><strong>N (Negative):</strong> Result < 0</li>
-            <li><strong>Z (Zero):</strong> Result == 0</li>
-            <li><strong>P (Positive):</strong> Result > 0</li>
-        </ul>
-
-        <p>
-            <code>BRnzp</code> checks these flags and branches if any specified flag is set:
-        </p>
+        <h3>Condition Flags</h3>
+        <div class="figure">
+            <div class="mermaid">
+flowchart LR
+    ALU["ALU Result"] --> FLAGS["Condition Flags"]
+    
+    FLAGS --> N["N (Negative)<br/>Result < 0"]
+    FLAGS --> Z["Z (Zero)<br/>Result == 0"]
+    FLAGS --> P["P (Positive)<br/>Result > 0"]
+    
+    N & Z & P --> BRANCH["BRnzp<br/>Branch Decision"]
+    
+    style FLAGS fill:#dbeafe,stroke:#3b82f6
+            </div>
+            <div class="figure-caption">Figure 5.4: Condition flags flow from ALU to branch decision</div>
+        </div>
 
         <div class="code-block">
-<pre>// Example: Branch if last result was positive
-SLT R1, R2, R3   // R1 = (R2 < R3) ? 1 : 0  → Sets P flag if R2 < R3
-BRnzp 0,0,1, 10  // Branch to PC+10 if P flag set (i.e., if R2 < R3)
+<pre>// Branch examples
+SLT  R1, R2, R3   // Sets P flag if R2 < R3
+BRnzp 0,0,1, 10   // Branch to PC+10 if P flag set
 
-// Branch if last result was zero (equality check)
-SUB R1, R2, R3   // R1 = R2 - R3  → Sets Z flag if R2 == R3
-BRnzp 0,1,0, 5   // Branch to PC+5 if Z flag set
+SUB  R1, R2, R3   // Sets Z flag if R2 == R3
+BRnzp 0,1,0, 5    // Branch to PC+5 if Z flag set
 
-// Unconditional branch (always branch)
-BRnzp 1,1,1, -3  // Branch to PC-3 (backwards jump for loops)</pre>
+BRnzp 1,1,1, -3   // Unconditional branch (loop back)</pre>
         </div>
 
         <h2>5.4 Instruction Encoding Details</h2>
 
-        <h3>Encoding Table</h3>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Instruction</th>
-                    <th>Encoding (Binary)</th>
-                    <th>Encoding (Hex)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><code>ADD R1, R2, R3</code></td>
-                    <td><code>0000 0001 0010 0011</code></td>
-                    <td><code>0x0123</code></td>
-                </tr>
-                <tr>
-                    <td><code>SUB R4, R5, R6</code></td>
-                    <td><code>0001 0100 0101 0110</code></td>
-                    <td><code>0x1456</code></td>
-                </tr>
-                <tr>
-                    <td><code>LOAD R7, R8, 4</code></td>
-                    <td><code>0111 0111 1000 0100</code></td>
-                    <td><code>0x7784</code></td>
-                </tr>
-                <tr>
-                    <td><code>STORE R9, R10, 2</code></td>
-                    <td><code>1000 1001 1010 0010</code></td>
-                    <td><code>0x89A2</code></td>
-                </tr>
-                <tr>
-                    <td><code>BRnzp 0,1,0, 8</code></td>
-                    <td><code>1001 0010 0000 1000</code></td>
-                    <td><code>0x9208</code></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h3>Decoder Logic</h3>
-
-        <p>
-            The hardware decoder must extract fields from the 16-bit instruction word:
-        </p>
+        <div class="figure">
+            <div class="mermaid">
+flowchart TB
+    subgraph ENCODE["Instruction Encoding Examples"]
+        direction TB
+        
+        E1["ADD R1, R2, R3<br/>→ 0000 0001 0010 0011<br/>→ 0x0123"]
+        E2["LOAD R7, R8, 4<br/>→ 0111 0111 1000 0100<br/>→ 0x7784"]
+        E3["BRnzp z, 8<br/>→ 1001 0010 0000 1000<br/>→ 0x9208"]
+    end
+    
+    style ENCODE fill:#f1f5f9,stroke:#64748b
+            </div>
+            <div class="figure-caption">Figure 5.5: Example instruction encodings</div>
+        </div>
 
         <div class="code-block">
-<pre>module decoder (
+<pre>// Hardware decoder
+module decoder (
     input [15:0] instruction,
-    output reg [3:0] opcode,
-    output reg [3:0] dst,
-    output reg [3:0] src1,
-    output reg [3:0] src2
+    output [3:0] opcode,
+    output [3:0] dst, src1, src2
 );
-
-    always @(*) begin
-        opcode = instruction[15:12];
-        dst    = instruction[11:8];
-        src1   = instruction[7:4];
-        src2   = instruction[3:0];
-    end
-
-    // Control signal generation
-    always @(*) begin
-        case (opcode)
-            4'h0: begin  // ADD
-                alu_enable = 1;
-                alu_op = ALU_ADD;
-                reg_write = 1;
-            end
-            
-            4'h7: begin  // LOAD
-                lsu_enable = 1;
-                mem_read = 1;
-                reg_write = 1;
-            end
-            
-            4'h9: begin  // BRnzp
-                branch_enable = 1;
-                // Extract nzp bits from dst field
-                nzp_mask = dst[3:1];
-                branch_offset = {src1, src2};  // 8-bit offset
-            end
-            
-            // ... other opcodes
-        endcase
-    end
-
+    assign opcode = instruction[15:12];
+    assign dst    = instruction[11:8];
+    assign src1   = instruction[7:4];
+    assign src2   = instruction[3:0];
 endmodule</pre>
         </div>
 
-        <h2>5.5 Register Allocation and Semantics</h2>
-
-        <h3>Thread-Local Registers</h3>
-
-        <p>
-            Each thread in a warp has its own private copy of R0-R12. When the hardware executes 
-            <code>ADD R1, R2, R3</code> for a warp:
-        </p>
+        <h2>5.5 SIMT Execution of Instructions</h2>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 12px;">
-Warp Execution (32 threads):
-Thread 0:  R1[0]  = R2[0]  + R3[0]
-Thread 1:  R1[1]  = R2[1]  + R3[1]
-Thread 2:  R1[2]  = R2[2]  + R3[2]
-...
-Thread 31: R1[31] = R2[31] + R3[31]
-
-All happen in parallel across 32 ALUs!</pre>
-            <div class="figure-caption">Figure 5.2: SIMT execution of ADD across warp</div>
-        </div>
-
-        <h3>Special Register Semantics</h3>
-
-        <p>
-            R13-R15 are <strong>read-only</strong> and provide per-thread identification:
-        </p>
-
-        <div class="code-block">
-<pre>// Example kernel using special registers
-__global__ void vectorAdd(int *a, int *b, int *c) {
-    // Compute global thread ID
-    // In assembly:
-    //   R1 = R15  (blockIdx)
-    //   R2 = R14  (blockDim)
-    //   MUL R3, R1, R2  (blockIdx * blockDim)
-    //   ADD R4, R3, R13 (+ threadIdx)
-    int tid = blockIdx * blockDim + threadIdx;  // R4
+            <div class="mermaid">
+flowchart LR
+    subgraph WARP["Warp Execution (32 threads)"]
+        direction TB
+        T0["Thread 0: R1[0] = R2[0] + R3[0]"]
+        T1["Thread 1: R1[1] = R2[1] + R3[1]"]
+        T2["Thread 2: R1[2] = R2[2] + R3[2]"]
+        TN["..."]
+        T31["Thread 31: R1[31] = R2[31] + R3[31]"]
+    end
     
-    // Load a[tid]
-    LOAD R5, R4, 0  (assuming R4 points to array a)
+    NOTE["All 32 ALUs execute<br/>in parallel!"]
     
-    // Load b[tid]
-    LOAD R6, R4, 0  (assuming R4 points to array b)
+    WARP --> NOTE
     
-    // Add
-    ADD R7, R5, R6
-    
-    // Store c[tid]
-    STORE R7, R4, 0
-}</pre>
-        </div>
-
-        <h3>Register Allocation Strategy</h3>
-
-        <p>
-            Compilers must map high-level variables to registers. Example:
-        </p>
-
-        <div class="code-block">
-<pre>// C code
-int x = a + b;
-int y = x * c;
-int z = y - d;
-
-// Compiler allocation:
-// x → R1
-// y → R2
-// z → R3
-// a → R4 (loaded from memory)
-// b → R5 (loaded from memory)
-// c → R6 (loaded from memory)
-// d → R7 (loaded from memory)
-
-// Assembly:
-LOAD R4, R0, offset_a   // Load a
-LOAD R5, R0, offset_b   // Load b
-ADD  R1, R4, R5         // x = a + b
-LOAD R6, R0, offset_c   // Load c
-MUL  R2, R1, R6         // y = x * c
-LOAD R7, R0, offset_d   // Load d
-SUB  R3, R2, R7         // z = y - d</pre>
+    style WARP fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 5.6: SIMT execution of ADD across 32 threads in a warp</div>
         </div>
 
         <h2>5.6 Instruction Latency and Throughput</h2>
-
-        <h3>Typical Latencies</h3>
 
         <table>
             <thead>
                 <tr>
                     <th>Instruction Type</th>
-                    <th>Latency (Cycles)</th>
-                    <th>Throughput (Instr/Cycle)</th>
+                    <th>Latency</th>
                     <th>Notes</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>ADD, SUB, AND, OR, XOR</td>
-                    <td>1-2</td>
-                    <td>1 (per warp)</td>
-                    <td>Fast, single-cycle if not pipelined</td>
-                </tr>
-                <tr>
-                    <td>MUL (INT32)</td>
-                    <td>3-4</td>
-                    <td>1</td>
-                    <td>Pipelined multiplier</td>
-                </tr>
-                <tr>
-                    <td>SLT</td>
-                    <td>1</td>
-                    <td>1</td>
-                    <td>Just a comparator</td>
-                </tr>
-                <tr>
-                    <td>LOAD (L1 hit)</td>
-                    <td>20-40</td>
-                    <td>1</td>
-                    <td>Cache access latency</td>
-                </tr>
-                <tr>
-                    <td>LOAD (L2 hit)</td>
-                    <td>100-150</td>
-                    <td>1</td>
-                    <td>Off-chip cache</td>
-                </tr>
-                <tr>
-                    <td>LOAD (DRAM)</td>
-                    <td>200-400</td>
-                    <td>1</td>
-                    <td>Main memory access</td>
-                </tr>
-                <tr>
-                    <td>STORE</td>
-                    <td>20-400</td>
-                    <td>1</td>
-                    <td>Depends on cache hierarchy</td>
-                </tr>
-                <tr>
-                    <td>BRnzp</td>
-                    <td>1-20</td>
-                    <td>1</td>
-                    <td>Depends on branch prediction</td>
-                </tr>
-                <tr>
-                    <td>SYNC</td>
-                    <td>Variable</td>
-                    <td>-</td>
-                    <td>Waits for all threads in block</td>
-                </tr>
+                <tr><td>ADD, SUB, AND, OR, XOR</td><td>1-2 cycles</td><td>Fast, single-cycle</td></tr>
+                <tr><td>MUL (INT32)</td><td>3-4 cycles</td><td>Pipelined multiplier</td></tr>
+                <tr><td>LOAD (L1 hit)</td><td>20-40 cycles</td><td>Cache access</td></tr>
+                <tr><td>LOAD (L2 hit)</td><td>100-150 cycles</td><td>Off-chip cache</td></tr>
+                <tr><td>LOAD (DRAM)</td><td>200-400 cycles</td><td>Main memory</td></tr>
             </tbody>
         </table>
 
         <div class="key-takeaway">
-            <strong>Latency Hiding:</strong> GPUs hide memory latency by switching to other warps. If one warp 
-            waits 200 cycles for LOAD, the scheduler executes 200 instructions from other warps in the meantime!
+            <strong>Latency Hiding:</strong> GPUs hide memory latency by switching to other warps. 
+            While one warp waits 200 cycles for LOAD, the scheduler executes 200 instructions from other warps!
         </div>
 
-        <h2>5.7 ISA Evolution and Extensions</h2>
-
-        <h3>Future Extensions</h3>
-
-        <p>
-            As your GPU grows, you might add:
-        </p>
-
-        <ul>
-            <li><strong>FP32/FP64 instructions:</strong> <code>FADD, FMUL, FDIV, FSQRT</code></li>
-            <li><strong>Immediate operands:</strong> <code>ADDI R1, R2, 42</code> (constant in instruction)</li>
-            <li><strong>Atomic operations:</strong> <code>ATOMIC_ADD, ATOMIC_CAS</code></li>
-            <li><strong>Vector instructions:</strong> <code>VEC_ADD</code> (operate on multiple elements)</li>
-            <li><strong>Predicated execution:</strong> <code>@P1 ADD R1, R2, R3</code> (execute only if predicate P1 is true)</li>
-            <li><strong>Texture operations:</strong> <code>TEX_LOAD</code> for graphics</li>
-        </ul>
-
-        <h3>Variable-Length Encoding</h3>
-
-        <p>
-            Our 16-bit encoding is compact but limits expressiveness. Real GPUs often use variable-length:
-        </p>
+        <h2>5.7 Comparison with Real GPU ISAs</h2>
 
         <div class="figure">
-            <pre style="font-family: monospace; font-size: 12px;">
-NVIDIA PTX (example):
-add.s32 r1, r2, r3;      // 32-bit encoding
-mov.u64 r4, 0x123456789ABCDEF; // 64-bit encoding (includes constant)
-
-AMD GCN:
-v_add_f32 v1, v2, v3     // 32-bit
-s_load_dwordx4 s[0:3], s[4:5], 0x10  // 64-bit (quad load)</pre>
-            <div class="figure-caption">Figure 5.3: Variable-length instructions</div>
-        </div>
-
-        <h2>5.8 Comparison with Real GPU ISAs</h2>
-
-        <h3>NVIDIA PTX (Parallel Thread Execution)</h3>
-
-        <p>
-            PTX is NVIDIA's virtual ISA (compiled to native SASS):
-        </p>
-
-        <div class="code-block">
-<pre>// PTX example: vector addition
-.entry vectorAdd(.param .u64 a, .param .u64 b, .param .u64 c) {
-    .reg .u32 %tid;
-    .reg .u64 %addr_a, %addr_b, %addr_c;
-    .reg .f32 %val_a, %val_b, %val_c;
+            <div class="mermaid">
+flowchart LR
+    subgraph REAL["Real GPU ISAs"]
+        direction TB
+        PTX["NVIDIA PTX<br/>Virtual ISA → SASS"]
+        GCN["AMD GCN/RDNA<br/>Native ISA"]
+        RVV["RISC-V Vector<br/>Open standard"]
+    end
     
-    mov.u32 %tid, %tid.x;  // Get thread ID
+    subgraph OURS["TinyGPU-ISA"]
+        TINY["16-bit encoding<br/>11 instructions<br/>Educational"]
+    end
     
-    ld.param.u64 %addr_a, [a];
-    ld.param.u64 %addr_b, [b];
-    ld.param.u64 %addr_c, [c];
+    REAL --> |"Inspired"| OURS
     
-    mul.wide.u32 %offset, %tid, 4;  // offset = tid * 4
-    add.u64 %addr_a, %addr_a, %offset;
-    
-    ld.global.f32 %val_a, [%addr_a];
-    ld.global.f32 %val_b, [%addr_b + %offset];
-    
-    add.f32 %val_c, %val_a, %val_b;
-    
-    st.global.f32 [%addr_c + %offset], %val_c;
-    
-    ret;
-}</pre>
-        </div>
-
-        <h3>AMD GCN (Graphics Core Next)</h3>
-
-        <p>
-            GCN is AMD's ISA for Radeon GPUs:
-        </p>
-
-        <div class="code-block">
-<pre>// GCN assembly (simplified vector add)
-v_add_f32 v0, v1, v2      // v0 = v1 + v2 (vector register, one per thread)
-s_load_dword s0, s[2:3], 0x0  // Load scalar value
-v_mul_f32 v3, v0, s0      // Multiply vector by scalar
-buffer_store_dword v3, v4, s[8:11], 0  // Store to buffer</pre>
-        </div>
-
-        <h3>RISC-V Vector Extension (RVV)</h3>
-
-        <p>
-            Open-source alternative gaining traction:
-        </p>
-
-        <div class="code-block">
-<pre>// RISC-V Vector (conceptual GPU use)
-vsetvli t0, a0, e32, m1   // Set vector length
-vle32.v v1, (a1)          // Load vector from address a1
-vle32.v v2, (a2)          // Load vector from address a2
-vadd.vv v3, v1, v2        // Vector add: v3 = v1 + v2
-vse32.v v3, (a3)          // Store vector to address a3</pre>
+    style REAL fill:#dbeafe,stroke:#3b82f6
+    style OURS fill:#dcfce7,stroke:#22c55e
+            </div>
+            <div class="figure-caption">Figure 5.7: TinyGPU-ISA compared to real GPU ISAs</div>
         </div>
 
         <table>
             <thead>
-                <tr>
-                    <th>ISA</th>
-                    <th>Vendor</th>
-                    <th>Bits</th>
-                    <th>Registers</th>
-                    <th>Complexity</th>
-                    <th>Openness</th>
-                </tr>
+                <tr><th>ISA</th><th>Vendor</th><th>Bits</th><th>Complexity</th><th>Openness</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>PTX</td>
-                    <td>NVIDIA</td>
-                    <td>Variable</td>
-                    <td>Virtual (unlimited)</td>
-                    <td>High</td>
-                    <td>Documented, proprietary</td>
-                </tr>
-                <tr>
-                    <td>GCN/RDNA</td>
-                    <td>AMD</td>
-                    <td>32/64</td>
-                    <td>256 VGPR, 102 SGPR</td>
-                    <td>Very high</td>
-                    <td>Partially documented</td>
-                </tr>
-                <tr>
-                    <td>RISC-V RVV</td>
-                    <td>Open</td>
-                    <td>Variable</td>
-                    <td>32 vector regs</td>
-                    <td>Medium</td>
-                    <td>Fully open</td>
-                </tr>
-                <tr>
-                    <td>TinyGPU-ISA</td>
-                    <td>Us!</td>
-                    <td>16</td>
-                    <td>16 (13 GP + 3 special)</td>
-                    <td>Low (educational)</td>
-                    <td>Fully open</td>
-                </tr>
+                <tr><td>PTX</td><td>NVIDIA</td><td>Variable</td><td>High</td><td>Documented</td></tr>
+                <tr><td>GCN/RDNA</td><td>AMD</td><td>32/64</td><td>Very high</td><td>Partial</td></tr>
+                <tr><td>RISC-V RVV</td><td>Open</td><td>Variable</td><td>Medium</td><td>Fully open</td></tr>
+                <tr><td>TinyGPU-ISA</td><td>Us!</td><td>16</td><td>Low</td><td>Fully open</td></tr>
             </tbody>
         </table>
 
-        <h2>5.9 Practical Example: Matrix Addition Kernel</h2>
-
-        <p>
-            Let's compile a simple kernel to our ISA:
-        </p>
+        <h2>5.8 Practical Example: Vector Addition</h2>
 
         <div class="code-block">
 <pre>// High-level kernel
-__global__ void matAdd(int *A, int *B, int *C, int N) {
+__global__ void vectorAdd(int *A, int *B, int *C, int N) {
     int tid = blockIdx * blockDim + threadIdx;
     if (tid < N) {
         C[tid] = A[tid] + B[tid];
     }
 }
 
-// Compiled to TinyGPU-ISA assembly:
-
-ENTRY:
-    // R0 = base address of arrays (passed by host)
-    // R13 = threadIdx (read-only special register)
-    // R14 = blockDim (read-only)
-    // R15 = blockIdx (read-only)
-    
-    // Compute global thread ID
-    MUL  R1, R15, R14       // R1 = blockIdx * blockDim
-    ADD  R2, R1, R13        // R2 = R1 + threadIdx = global tid
-    
-    // Check bounds: if (tid >= N) return
-    LOAD R3, R0, 0          // R3 = N (assuming stored at R0+0)
-    SLT  R4, R2, R3         // R4 = (tid < N) ? 1 : 0
-    BRnzp 0,1,0, EXIT       // If R4 == 0 (not less than), goto EXIT
-    
-    // Compute addresses
-    // Assume: A at R0+4, B at R0+8, C at R0+12
-    LOAD R5, R0, 1          // R5 = base address of A
-    ADD  R6, R5, R2         // R6 = &A[tid]
-    
-    LOAD R7, R0, 2          // R7 = base address of B
-    ADD  R8, R7, R2         // R8 = &B[tid]
-    
-    LOAD R9, R0, 3          // R9 = base address of C
-    ADD  R10, R9, R2        // R10 = &C[tid]
-    
-    // Load A[tid], B[tid]
-    LOAD R11, R6, 0         // R11 = A[tid]
-    LOAD R12, R8, 0         // R12 = B[tid]
-    
-    // Compute sum
-    ADD  R1, R11, R12       // R1 = A[tid] + B[tid]
-    
-    // Store C[tid]
-    STORE R1, R10, 0        // C[tid] = R1
-
-EXIT:
-    // Implicit return (kernel ends)
-</pre>
+// Compiled to TinyGPU-ISA:
+MUL  R1, R15, R14       // R1 = blockIdx * blockDim
+ADD  R2, R1, R13        // R2 = global thread ID
+LOAD R3, R0, 0          // R3 = N
+SLT  R4, R2, R3         // R4 = (tid < N)
+BRnzp 0,1,0, EXIT       // if R4 == 0, goto EXIT
+LOAD R5, R0, 1          // R5 = &A
+ADD  R6, R5, R2         // R6 = &A[tid]
+LOAD R7, R0, 2          // R7 = &B
+ADD  R8, R7, R2         // R8 = &B[tid]
+LOAD R9, R0, 3          // R9 = &C
+ADD  R10, R9, R2        // R10 = &C[tid]
+LOAD R11, R6, 0         // R11 = A[tid]
+LOAD R12, R8, 0         // R12 = B[tid]
+ADD  R1, R11, R12       // R1 = A[tid] + B[tid]
+STORE R1, R10, 0        // C[tid] = R1
+EXIT:</pre>
         </div>
 
-        <h3>Encoding the Program</h3>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Address</th>
-                    <th>Assembly</th>
-                    <th>Machine Code (Hex)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>0x00</td>
-                    <td><code>MUL R1, R15, R14</code></td>
-                    <td><code>0x21FE</code></td>
-                </tr>
-                <tr>
-                    <td>0x01</td>
-                    <td><code>ADD R2, R1, R13</code></td>
-                    <td><code>0x021D</code></td>
-                </tr>
-                <tr>
-                    <td>0x02</td>
-                    <td><code>LOAD R3, R0, 0</code></td>
-                    <td><code>0x7300</code></td>
-                </tr>
-                <tr>
-                    <td>0x03</td>
-                    <td><code>SLT R4, R2, R3</code></td>
-                    <td><code>0x3423</code></td>
-                </tr>
-                <tr>
-                    <td>0x04</td>
-                    <td><code>BRnzp 0,1,0, 15</code></td>
-                    <td><code>0x920F</code></td>
-                </tr>
-                <tr>
-                    <td>...</td>
-                    <td>...</td>
-                    <td>...</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>5.10 Exception Handling and Edge Cases</h2>
-
-        <h3>What Can Go Wrong?</h3>
-
-        <ul>
-            <li><strong>Invalid opcode:</strong> Instruction[15:12] not in 0x0-0xA</li>
-            <li><strong>Division by zero:</strong> (If we add DIV instruction)</li>
-            <li><strong>Memory access violation:</strong> Load/store to invalid address</li>
-            <li><strong>Register out of bounds:</strong> Reference to R16+ (impossible in 4-bit encoding)</li>
-        </ul>
-
-        <h3>Exception Handling Strategies</h3>
-
-        <ol>
-            <li><strong>Trap to host:</strong> Halt GPU, notify CPU driver</li>
-            <li><strong>Mask thread:</strong> Mark thread as "faulted", exclude from further execution</li>
-            <li><strong>Saturation:</strong> Clamp results to valid range (e.g., 0xFFFFFFFF for overflow)</li>
-            <li><strong>Ignore:</strong> Undefined behavior (fast but dangerous!)</li>
-        </ol>
-
-        <div class="engineer-note">
-            <strong>Design Choice:</strong> For our minimal GPU, we'll use thread masking. If a thread causes 
-            an exception, set its active bit to 0 and continue with other threads. The host can query which 
-            threads faulted after kernel completion.
+        <div class="figure">
+            <div class="mermaid">
+flowchart TB
+    subgraph KERNEL["Vector Addition Execution Flow"]
+        TID["Compute Thread ID<br/>tid = blockIdx × blockDim + threadIdx"]
+        BOUNDS["Bounds Check<br/>if tid < N"]
+        LOAD_A["Load A[tid]"]
+        LOAD_B["Load B[tid]"]
+        ADD["Add: result = A + B"]
+        STORE["Store C[tid]"]
+        
+        TID --> BOUNDS
+        BOUNDS -->|Yes| LOAD_A
+        BOUNDS -->|No| EXIT["Exit"]
+        LOAD_A --> LOAD_B --> ADD --> STORE
+    end
+    
+    style KERNEL fill:#f1f5f9,stroke:#64748b
+            </div>
+            <div class="figure-caption">Figure 5.8: Vector addition kernel execution flow</div>
         </div>
 
-        <h2>5.11 Chapter Summary</h2>
-
-        <p>
-            In this chapter, we designed a complete ISA for our GPU:
-        </p>
+        <h2>5.9 Chapter Summary</h2>
 
         <ul>
-            <li><strong>TinyGPU-ISA:</strong> 16-bit instructions, 16 registers, 11 core operations</li>
-            <li><strong>Instruction types:</strong> Arithmetic (ADD, SUB, MUL, SLT), Logical (AND, OR, XOR), Memory (LOAD, STORE), Control flow (BRnzp, SYNC)</li>
-            <li><strong>Register file:</strong> R0-R12 (general purpose), R13-R15 (special read-only for thread/block IDs)</li>
-            <li><strong>Encoding:</strong> Opcode[15:12], Dst[11:8], Src1[7:4], Src2[3:0]</li>
+            <li><strong>TinyGPU-ISA:</strong> 16-bit instructions, 16 registers, 11 operations</li>
+            <li><strong>Instruction types:</strong> Arithmetic, Logical, Memory, Control flow</li>
+            <li><strong>Register file:</strong> R0-R12 (GP), R13-R15 (special)</li>
+            <li><strong>Encoding:</strong> OPCODE[15:12] | DST[11:8] | SRC1[7:4] | SRC2[3:0]</li>
             <li><strong>Condition flags:</strong> N/Z/P for branch decisions</li>
-            <li><strong>Latencies:</strong> ALU 1-4 cycles, memory 20-400 cycles</li>
-            <li><strong>Comparison:</strong> Simpler than PTX/GCN, but follows same principles</li>
         </ul>
 
         <div class="key-takeaway">
-            <strong>Next Steps:</strong> In Chapter 6 (Part II: Execution & Scheduling), we'll design the pipeline 
-            that executes these instructions — fetch, decode, execute, memory, writeback. We'll also handle branches, 
-            stalls, and hazards.
+            <strong>Next Steps:</strong> In Chapter 6, we'll design the pipeline that executes these instructions.
         </div>
 
         <div class="exercise">
-            <strong>Exercise 5.1:</strong> Write TinyGPU-ISA assembly for this C code:
-            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px;">
-int x = a * 2 + b;
-if (x > 100) {
-    x = 100;
-}</pre>
+            <strong>Exercise 5.1:</strong> Write TinyGPU-ISA assembly for: <code>int x = a * 2 + b; if (x > 100) x = 100;</code>
         </div>
 
         <div class="exercise">
-            <strong>Exercise 5.2:</strong> Design an instruction encoding for <code>ADDI Rd, Rs, imm8</code> 
-            (add immediate with 8-bit constant). How would you fit it in 16 bits?
+            <strong>Exercise 5.2:</strong> Design encoding for <code>ADDI Rd, Rs, imm8</code> in 16 bits.
         </div>
 
         <div class="exercise">
-            <strong>Exercise 5.3:</strong> Hand-compile a simple loop to assembly:
-            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px;">
-for (int i = 0; i < 10; i++) {
-    sum += array[i];
-}</pre>
-        </div>
-
-        <div class="exercise">
-            <strong>Exercise 5.4:</strong> Calculate instruction memory size: If your kernel has 256 instructions 
-            and each is 16 bits, how much instruction cache do you need (in bytes)?
-        </div>
-
-        <div class="exercise">
-            <strong>Exercise 5.5:</strong> Extend the ISA with an atomic instruction <code>ATOMIC_ADD</code>. 
-            Design the encoding and semantics.
+            <strong>Exercise 5.3:</strong> Hand-compile a loop: <code>for (int i = 0; i < 10; i++) sum += array[i];</code>
         </div>
 
         <h2>Further Reading</h2>
         <ul>
-            <li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html" target="_blank">NVIDIA PTX ISA Reference</a> — The real deal</li>
-            <li><a href="https://www.amd.com/content/dam/amd/en/documents/radeon-tech-docs/instruction-set-architectures/AMD_GCN3_Instruction_Set_Architecture.pdf" target="_blank">AMD GCN ISA Documentation</a></li>
-            <li><a href="https://riscv.org/technical/specifications/" target="_blank">RISC-V Vector Extension Spec</a></li>
-            <li>"Computer Organization and Design: RISC-V Edition" by Patterson & Hennessy — ISA fundamentals</li>
-            <li><a href="https://github.com/adam-maj/tiny-gpu/blob/master/src/decoder.sv" target="_blank">tiny-gpu decoder.sv</a> — See our ISA in action</li>
+            <li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html">NVIDIA PTX ISA Reference</a></li>
+            <li><a href="https://riscv.org/technical/specifications/">RISC-V Vector Extension Spec</a></li>
+            <li>"Computer Organization and Design: RISC-V Edition" — ISA fundamentals</li>
         </ul>
 
         <div class="chapter-nav">
@@ -965,5 +471,21 @@ for (int i = 0; i < 10; i++) {
             <a href="chapter-06.html">Next: Pipeline Design →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#6366f1',
+                primaryTextColor: '#1e293b',
+                primaryBorderColor: '#4f46e5',
+                lineColor: '#64748b',
+                secondaryColor: '#10b981',
+                tertiaryColor: '#f1f5f9'
+            }
+        });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>

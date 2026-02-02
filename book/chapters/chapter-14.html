@@ -1,40 +1,646 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chapter 14: Testing, Verification, and Debugging | Create Your Own GPU</title>
+    <title>Chapter 14: Testing and Verification | Create Your Own GPU</title>
     <link rel="stylesheet" href="../styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        .chapter-content { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+        .code-block code { color: #d4d4d4; }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .number { color: #b5cea8; }
+        .decorator { color: #dcdcaa; }
+        .function { color: #dcdcaa; }
+        .key-takeaway { background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%); border-left: 4px solid #2196f3; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .exercise { background: linear-gradient(135deg, #fff3e0 0%, #fffaf0 100%); border-left: 4px solid #ff9800; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0; }
+        .mermaid { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0; text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 14px 16px; text-align: left; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #f0f4ff; }
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .success-box { background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .nav-container { display: flex; justify-content: space-between; margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-container a { text-decoration: none; color: #667eea; font-weight: 500; transition: color 0.3s; }
+        .nav-container a:hover { color: #764ba2; }
+        h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 40px; }
+        h3 { color: #555; margin-top: 30px; }
+        .solution { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; }
+        .file-header { background: #2d2d2d; color: #9cdcfe; padding: 8px 16px; border-radius: 8px 8px 0 0; font-size: 12px; font-family: monospace; margin-bottom: -20px; }
+    </style>
 </head>
 <body>
-    <div style="max-width: 850px; margin: 0 auto; padding: 40px 20px;">
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-13.html">← Previous</a>
+    <div class="chapter-content">
+        <div class="nav-container">
+            <a href="chapter-13.html">← Previous: Compiler Design</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-15.html">Next →</a>
+            <a href="chapter-15.html">Next: Microarchitecture Fundamentals →</a>
         </div>
 
-        <h1>Chapter 14: Testing, Verification, and Debugging</h1>
-        <div style="color: #999; margin: 20px 0;">III: Software & Tooling • Reading time: ~60 min</div>
+        <h1>Chapter 14: Testing and Verification</h1>
+        <div style="color: #666; margin: 20px 0; font-size: 0.95em;">
+            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 10px;">Part III: Software and Tooling</span>
+            <span>Reading time: ~55 minutes</span>
+        </div>
+
+        <h2>Introduction</h2>
+        <p>Hardware verification is one of the most critical—and often most time-consuming—aspects of chip design. Unlike software bugs that can be patched after release, hardware bugs in fabricated chips are permanent and extremely costly. Industry estimates suggest that verification consumes 60-70% of the total design effort for complex chips.</p>
         
-        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 40px 0;">
-            <h3>Coming Soon</h3>
-            <p>This chapter is in progress. Check back soon for detailed content on <strong>Testing, Verification, and Debugging</strong>.</p>
-            <p>Topics to be covered:
-            <ul>
-                <li>Key concepts and theory</li>
-                <li>Practical examples with code</li>
-                <li>Design patterns and best practices</li>
-                <li>Exercises and further reading</li>
-            </ul>
-            </p>
+        <p>This chapter introduces hardware verification methodologies, with hands-on focus on using <strong>cocotb</strong> (Coroutines-based Co-simulation Test Bench) to test the tiny-gpu design. We'll walk through the actual test infrastructure used in the project and learn to write comprehensive verification tests.</p>
+
+        <h2>14.1 Verification Methodologies Overview</h2>
+        
+        <p>There are multiple approaches to verifying hardware designs, each with trade-offs:</p>
+
+        <div class="mermaid">
+graph TB
+    A["Verification Methods"] --> B["Simulation"]
+    A --> C["Formal Verification"]
+    A --> D["Emulation/FPGA"]
+    A --> E["Post-Silicon"]
+    
+    B --> B1["Unit Tests"]
+    B --> B2["Integration Tests"]
+    B --> B3["Random Testing"]
+    
+    C --> C1["Model Checking"]
+    C --> C2["Theorem Proving"]
+    C --> C3["Equivalence Checking"]
+    
+    D --> D1["FPGA Prototyping"]
+    D --> D2["Hardware Emulators"]
+    
+    E --> E1["Bring-up Tests"]
+    E --> E2["Characterization"]
+    
+    style A fill:#e3f2fd,stroke:#1976d2
+    style B fill:#e8f5e9,stroke:#388e3c
+    style C fill:#fff3e0,stroke:#f57c00
+    style D fill:#f3e5f5,stroke:#7b1fa2
+    style E fill:#fce4ec,stroke:#c2185b
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin: 40px 0;">
-            <a href="chapter-13.html">← Previous</a>
+        <table>
+            <thead>
+                <tr><th>Method</th><th>Speed</th><th>Coverage</th><th>Debug</th><th>Use Case</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>RTL Simulation</td><td>Slow (kHz)</td><td>Depends on tests</td><td>Excellent</td><td>Development, unit testing</td></tr>
+                <tr><td>Formal Verification</td><td>N/A (exhaustive)</td><td>Complete for spec</td><td>Good</td><td>Critical paths, protocols</td></tr>
+                <tr><td>FPGA Emulation</td><td>Fast (MHz)</td><td>Depends on tests</td><td>Limited</td><td>System integration, SW dev</td></tr>
+                <tr><td>Post-Silicon</td><td>Real-time</td><td>Limited visibility</td><td>Very Limited</td><td>Final validation</td></tr>
+            </tbody>
+        </table>
+
+        <h2>14.2 Introduction to cocotb</h2>
+        
+        <p><strong>cocotb</strong> is a Python-based verification framework that allows you to write testbenches using Python coroutines. It interfaces with RTL simulators (like Icarus Verilog, Verilator, or commercial tools) through VPI/VHPI.</p>
+
+        <h3>14.2.1 Why cocotb?</h3>
+        
+        <div class="info-box">
+            <strong>Advantages of cocotb over traditional SystemVerilog testbenches:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>Productivity:</strong> Python is more expressive than SystemVerilog</li>
+                <li><strong>Ecosystem:</strong> Access to numpy, scipy, matplotlib, ML libraries</li>
+                <li><strong>Debugging:</strong> Python's interactive debugging and profiling</li>
+                <li><strong>Portability:</strong> Same tests work with any VPI-compatible simulator</li>
+                <li><strong>Learning curve:</strong> Lower barrier for software engineers</li>
+            </ul>
+        </div>
+
+        <h3>14.2.2 cocotb Architecture</h3>
+
+        <div class="mermaid">
+sequenceDiagram
+    participant Python as Python Testbench
+    participant VPI as VPI Interface
+    participant Sim as RTL Simulator
+    participant DUT as Design Under Test
+    
+    Python->>VPI: Set signal values
+    VPI->>Sim: Apply stimulus
+    Sim->>DUT: Propagate signals
+    DUT->>Sim: Compute outputs
+    Sim->>VPI: Sample signals
+    VPI->>Python: Return values
+    Python->>Python: Check assertions
+        </div>
+
+        <h2>14.3 tiny-gpu Test Infrastructure</h2>
+        
+        <p>The tiny-gpu project uses a well-organized test structure. Let's examine each component:</p>
+
+        <div class="code-block">
+<code>test/
+├── __init__.py           <span class="comment"># Package marker</span>
+├── test_matadd.py        <span class="comment"># Matrix addition test</span>
+├── test_matmul.py        <span class="comment"># Matrix multiplication test</span>
+└── helpers/
+    ├── format.py         <span class="comment"># Output formatting utilities</span>
+    ├── logger.py         <span class="comment"># Logging configuration</span>
+    ├── memory.py         <span class="comment"># Memory model (program + data)</span>
+    └── setup.py          <span class="comment"># Test initialization</span>
+</code>
+        </div>
+
+        <h3>14.3.1 The Memory Model</h3>
+        <p>The <code>Memory</code> class simulates external memory for the GPU. It handles read/write requests from the RTL through channel-based interfaces:</p>
+
+        <div class="file-header">test/helpers/memory.py</div>
+        <div class="code-block">
+<code><span class="keyword">class</span> <span class="type">Memory</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, dut, addr_bits, data_bits, channels, name):
+        <span class="keyword">self</span>.dut = dut
+        <span class="keyword">self</span>.addr_bits = addr_bits
+        <span class="keyword">self</span>.data_bits = data_bits
+        <span class="keyword">self</span>.memory = [<span class="number">0</span>] * (<span class="number">2</span>**addr_bits)  <span class="comment"># Memory array</span>
+        <span class="keyword">self</span>.channels = channels
+        <span class="keyword">self</span>.name = name
+
+        <span class="comment"># Connect to DUT signals dynamically</span>
+        <span class="keyword">self</span>.mem_read_valid = getattr(dut, f<span class="string">"{name}_mem_read_valid"</span>)
+        <span class="keyword">self</span>.mem_read_address = getattr(dut, f<span class="string">"{name}_mem_read_address"</span>)
+        <span class="keyword">self</span>.mem_read_ready = getattr(dut, f<span class="string">"{name}_mem_read_ready"</span>)
+        <span class="keyword">self</span>.mem_read_data = getattr(dut, f<span class="string">"{name}_mem_read_data"</span>)
+
+        <span class="comment"># Write interface (data memory only)</span>
+        <span class="keyword">if</span> name != <span class="string">"program"</span>:
+            <span class="keyword">self</span>.mem_write_valid = getattr(dut, f<span class="string">"{name}_mem_write_valid"</span>)
+            <span class="keyword">self</span>.mem_write_address = getattr(dut, f<span class="string">"{name}_mem_write_address"</span>)
+            <span class="keyword">self</span>.mem_write_data = getattr(dut, f<span class="string">"{name}_mem_write_data"</span>)
+            <span class="keyword">self</span>.mem_write_ready = getattr(dut, f<span class="string">"{name}_mem_write_ready"</span>)
+</code>
+        </div>
+
+        <h3>14.3.2 Memory Run Cycle</h3>
+        <p>Each simulation cycle, the memory model processes pending read/write requests:</p>
+
+        <div class="code-block">
+<code><span class="keyword">def</span> <span class="function">run</span>(<span class="keyword">self</span>):
+    <span class="comment"># Parse read valid signals (one per channel)</span>
+    mem_read_valid = [
+        <span class="keyword">int</span>(<span class="keyword">str</span>(<span class="keyword">self</span>.mem_read_valid.value)[i:i+<span class="number">1</span>], <span class="number">2</span>)
+        <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">0</span>, len(<span class="keyword">str</span>(<span class="keyword">self</span>.mem_read_valid.value)), <span class="number">1</span>)
+    ]
+
+    <span class="comment"># Parse read addresses</span>
+    mem_read_address = [
+        <span class="keyword">int</span>(<span class="keyword">str</span>(<span class="keyword">self</span>.mem_read_address.value)[i:i+<span class="keyword">self</span>.addr_bits], <span class="number">2</span>)
+        <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">0</span>, len(<span class="keyword">str</span>(<span class="keyword">self</span>.mem_read_address.value)), <span class="keyword">self</span>.addr_bits)
+    ]
+
+    <span class="comment"># Service each channel</span>
+    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="keyword">self</span>.channels):
+        <span class="keyword">if</span> mem_read_valid[i] == <span class="number">1</span>:
+            mem_read_data[i] = <span class="keyword">self</span>.memory[mem_read_address[i]]
+            mem_read_ready[i] = <span class="number">1</span>
+        <span class="keyword">else</span>:
+            mem_read_ready[i] = <span class="number">0</span>
+
+    <span class="comment"># Write back to DUT</span>
+    <span class="keyword">self</span>.mem_read_data.value = <span class="keyword">int</span>(<span class="string">''.join</span>(...), <span class="number">2</span>)
+    <span class="keyword">self</span>.mem_read_ready.value = <span class="keyword">int</span>(<span class="string">''.join</span>(...), <span class="number">2</span>)
+</code>
+        </div>
+
+        <h2>14.4 Walkthrough: Matrix Addition Test</h2>
+        
+        <p>Let's analyze the complete <code>test_matadd.py</code> test case line by line:</p>
+
+        <div class="file-header">test/test_matadd.py</div>
+        <div class="code-block">
+<code><span class="keyword">import</span> cocotb
+<span class="keyword">from</span> cocotb.triggers <span class="keyword">import</span> RisingEdge
+<span class="keyword">from</span> .helpers.setup <span class="keyword">import</span> setup
+<span class="keyword">from</span> .helpers.memory <span class="keyword">import</span> Memory
+<span class="keyword">from</span> .helpers.format <span class="keyword">import</span> format_cycle
+<span class="keyword">from</span> .helpers.logger <span class="keyword">import</span> logger
+
+<span class="decorator">@cocotb.test()</span>
+<span class="keyword">async def</span> <span class="function">test_matadd</span>(dut):
+    <span class="comment"># ===== PROGRAM MEMORY SETUP =====</span>
+    program_memory = Memory(dut=dut, addr_bits=<span class="number">8</span>, data_bits=<span class="number">16</span>, channels=<span class="number">1</span>, name=<span class="string">"program"</span>)
+    
+    <span class="comment"># Each instruction is a 16-bit word (see decoder.sv for encoding)</span>
+    program = [
+        <span class="number">0b0101000011011110</span>, <span class="comment"># MUL R0, %blockIdx, %blockDim</span>
+        <span class="number">0b0011000000001111</span>, <span class="comment"># ADD R0, R0, %threadIdx  ; i = blockIdx * blockDim + threadIdx</span>
+        <span class="number">0b1001000100000000</span>, <span class="comment"># CONST R1, #0            ; baseA</span>
+        <span class="number">0b1001001000001000</span>, <span class="comment"># CONST R2, #8            ; baseB</span>
+        <span class="number">0b1001001100010000</span>, <span class="comment"># CONST R3, #16           ; baseC</span>
+        <span class="number">0b0011010000010000</span>, <span class="comment"># ADD R4, R1, R0          ; addr(A[i])</span>
+        <span class="number">0b0111010001000000</span>, <span class="comment"># LDR R4, R4              ; load A[i]</span>
+        <span class="number">0b0011010100100000</span>, <span class="comment"># ADD R5, R2, R0          ; addr(B[i])</span>
+        <span class="number">0b0111010101010000</span>, <span class="comment"># LDR R5, R5              ; load B[i]</span>
+        <span class="number">0b0011011001000101</span>, <span class="comment"># ADD R6, R4, R5          ; C[i] = A[i] + B[i]</span>
+        <span class="number">0b0011011100110000</span>, <span class="comment"># ADD R7, R3, R0          ; addr(C[i])</span>
+        <span class="number">0b1000000001110110</span>, <span class="comment"># STR R7, R6              ; store C[i]</span>
+        <span class="number">0b1111000000000000</span>, <span class="comment"># RET                     ; end kernel</span>
+    ]
+</code>
+        </div>
+
+        <h3>14.4.1 Understanding the Kernel</h3>
+        <p>This program implements vector addition: <code>C[i] = A[i] + B[i]</code></p>
+
+        <div class="mermaid">
+graph LR
+    A["Memory Layout"] --> A1["0-7: Matrix A"]
+    A --> A2["8-15: Matrix B"]
+    A --> A3["16-23: Matrix C (output)"]
+    
+    B["Thread Execution"] --> B1["Thread 0: C[0] = A[0] + B[0]"]
+    B --> B2["Thread 1: C[1] = A[1] + B[1]"]
+    B --> B3["..."]
+    B --> B4["Thread 7: C[7] = A[7] + B[7]"]
+    
+    style A fill:#e3f2fd
+    style B fill:#e8f5e9
+        </div>
+
+        <h3>14.4.2 Data Memory Setup</h3>
+        <div class="code-block">
+<code>    <span class="comment"># ===== DATA MEMORY SETUP =====</span>
+    data_memory = Memory(dut=dut, addr_bits=<span class="number">8</span>, data_bits=<span class="number">8</span>, channels=<span class="number">4</span>, name=<span class="string">"data"</span>)
+    
+    <span class="comment"># Initialize memory with test data</span>
+    data = [
+        <span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>,  <span class="comment"># Matrix A (addresses 0-7)</span>
+        <span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>   <span class="comment"># Matrix B (addresses 8-15)</span>
+    ]
+    <span class="comment"># Expected output at addresses 16-23: [0, 2, 4, 6, 8, 10, 12, 14]</span>
+
+    <span class="comment"># Configure GPU with 8 threads</span>
+    threads = <span class="number">8</span>
+
+    <span class="comment"># Initialize the simulation</span>
+    <span class="keyword">await</span> setup(
+        dut=dut,
+        program_memory=program_memory,
+        program=program,
+        data_memory=data_memory,
+        data=data,
+        threads=threads
+    )
+</code>
+        </div>
+
+        <h3>14.4.3 Simulation Loop</h3>
+        <div class="code-block">
+<code>    <span class="comment"># ===== MAIN SIMULATION LOOP =====</span>
+    data_memory.display(<span class="number">24</span>)  <span class="comment"># Show initial memory state</span>
+
+    cycles = <span class="number">0</span>
+    <span class="keyword">while</span> dut.done.value != <span class="number">1</span>:  <span class="comment"># Run until GPU signals completion</span>
+        <span class="comment"># Service memory requests each cycle</span>
+        data_memory.run()
+        program_memory.run()
+
+        <span class="comment"># Wait for read-only phase to sample signals</span>
+        <span class="keyword">await</span> cocotb.triggers.ReadOnly()
+        format_cycle(dut, cycles)  <span class="comment"># Log debug info</span>
+        
+        <span class="comment"># Advance to next clock edge</span>
+        <span class="keyword">await</span> RisingEdge(dut.clk)
+        cycles += <span class="number">1</span>
+
+    logger.info(f<span class="string">"Completed in {cycles} cycles"</span>)
+    data_memory.display(<span class="number">24</span>)  <span class="comment"># Show final memory state</span>
+</code>
+        </div>
+
+        <h3>14.4.4 Result Verification</h3>
+        <div class="code-block">
+<code>    <span class="comment"># ===== VERIFY RESULTS =====</span>
+    expected_results = [a + b <span class="keyword">for</span> a, b <span class="keyword">in</span> zip(data[<span class="number">0</span>:<span class="number">8</span>], data[<span class="number">8</span>:<span class="number">16</span>])]
+    
+    <span class="keyword">for</span> i, expected <span class="keyword">in</span> enumerate(expected_results):
+        result = data_memory.memory[i + <span class="number">16</span>]  <span class="comment"># Results at addresses 16-23</span>
+        <span class="keyword">assert</span> result == expected, \
+            f<span class="string">"Result mismatch at index {i}: expected {expected}, got {result}"</span>
+</code>
+        </div>
+
+        <h2>14.5 Running Tests</h2>
+        
+        <h3>14.5.1 Prerequisites</h3>
+        <p>Before running tests, ensure you have the required tools installed:</p>
+
+        <div class="code-block">
+<code><span class="comment"># Install cocotb</span>
+pip install cocotb
+
+<span class="comment"># Install Icarus Verilog (Ubuntu/Debian)</span>
+sudo apt-get install iverilog
+
+<span class="comment"># Install sv2v (SystemVerilog to Verilog converter)</span>
+<span class="comment"># See: https://github.com/zachjs/sv2v</span>
+
+<span class="comment"># Create build directory</span>
+mkdir -p build
+</code>
+        </div>
+
+        <h3>14.5.2 Running Tests</h3>
+        <div class="code-block">
+<code><span class="comment"># Run matrix addition test</span>
+make test_matadd
+
+<span class="comment"># Run matrix multiplication test</span>
+make test_matmul
+
+<span class="comment"># View test logs</span>
+cat test/logs/test_matadd.log
+</code>
+        </div>
+
+        <div class="success-box">
+            <strong>Expected Output:</strong>
+            <pre style="margin: 10px 0; font-family: monospace;">
+DATA MEMORY (Before):
++-------------+
+| Addr | Data |
++-------------+
+|  0   |  0   |
+|  1   |  1   |
+...
+| 15   |  7   |
+| 16   |  0   |
+...
+
+Completed in 156 cycles
+
+DATA MEMORY (After):
++-------------+
+| Addr | Data |
++-------------+
+...
+| 16   |  0   |  # 0 + 0
+| 17   |  2   |  # 1 + 1
+| 18   |  4   |  # 2 + 2
+| 19   |  6   |  # 3 + 3
+...
+            </pre>
+        </div>
+
+        <h2>14.6 Writing New Tests</h2>
+        
+        <p>Let's create a new test for a dot product kernel:</p>
+
+        <div class="code-block">
+<code><span class="keyword">import</span> cocotb
+<span class="keyword">from</span> cocotb.triggers <span class="keyword">import</span> RisingEdge
+<span class="keyword">from</span> .helpers.setup <span class="keyword">import</span> setup
+<span class="keyword">from</span> .helpers.memory <span class="keyword">import</span> Memory
+<span class="keyword">from</span> .helpers.logger <span class="keyword">import</span> logger
+
+<span class="decorator">@cocotb.test()</span>
+<span class="keyword">async def</span> <span class="function">test_dotproduct</span>(dut):
+    <span class="string">"""Test dot product: result = sum(A[i] * B[i])"""</span>
+    
+    program_memory = Memory(dut=dut, addr_bits=<span class="number">8</span>, data_bits=<span class="number">16</span>, channels=<span class="number">1</span>, name=<span class="string">"program"</span>)
+    
+    <span class="comment"># Kernel: Each thread computes A[i] * B[i] and stores to temp[i]</span>
+    <span class="comment"># Note: tiny-gpu lacks atomic add, so we compute partial products</span>
+    program = [
+        <span class="number">0b0101000011011110</span>,  <span class="comment"># MUL R0, %blockIdx, %blockDim</span>
+        <span class="number">0b0011000000001111</span>,  <span class="comment"># ADD R0, R0, %threadIdx  ; i</span>
+        <span class="number">0b1001000100000000</span>,  <span class="comment"># CONST R1, #0            ; baseA</span>
+        <span class="number">0b1001001000001000</span>,  <span class="comment"># CONST R2, #8            ; baseB</span>
+        <span class="number">0b1001001100010000</span>,  <span class="comment"># CONST R3, #16           ; temp[]</span>
+        <span class="number">0b0011010000010000</span>,  <span class="comment"># ADD R4, R1, R0          ; &amp;A[i]</span>
+        <span class="number">0b0111010001000000</span>,  <span class="comment"># LDR R4, R4              ; A[i]</span>
+        <span class="number">0b0011010100100000</span>,  <span class="comment"># ADD R5, R2, R0          ; &amp;B[i]</span>
+        <span class="number">0b0111010101010000</span>,  <span class="comment"># LDR R5, R5              ; B[i]</span>
+        <span class="number">0b0101011001000101</span>,  <span class="comment"># MUL R6, R4, R5          ; A[i] * B[i]</span>
+        <span class="number">0b0011011100110000</span>,  <span class="comment"># ADD R7, R3, R0          ; &amp;temp[i]</span>
+        <span class="number">0b1000000001110110</span>,  <span class="comment"># STR R7, R6              ; store partial</span>
+        <span class="number">0b1111000000000000</span>,  <span class="comment"># RET</span>
+    ]
+
+    data_memory = Memory(dut=dut, addr_bits=<span class="number">8</span>, data_bits=<span class="number">8</span>, channels=<span class="number">4</span>, name=<span class="string">"data"</span>)
+    data = [
+        <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>,  <span class="comment"># A</span>
+        <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>,  <span class="comment"># B (all 2s for easy verification)</span>
+    ]
+    <span class="comment"># Expected: [2, 4, 6, 8, 10, 12, 14, 16]</span>
+
+    <span class="keyword">await</span> setup(dut=dut, program_memory=program_memory, program=program,
+                 data_memory=data_memory, data=data, threads=<span class="number">8</span>)
+
+    cycles = <span class="number">0</span>
+    <span class="keyword">while</span> dut.done.value != <span class="number">1</span>:
+        data_memory.run()
+        program_memory.run()
+        <span class="keyword">await</span> RisingEdge(dut.clk)
+        cycles += <span class="number">1</span>
+
+    logger.info(f<span class="string">"Completed in {cycles} cycles"</span>)
+
+    <span class="comment"># Verify partial products</span>
+    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">8</span>):
+        expected = data[i] * data[i + <span class="number">8</span>]
+        result = data_memory.memory[i + <span class="number">16</span>]
+        <span class="keyword">assert</span> result == expected, f<span class="string">"Mismatch at {i}: {result} != {expected}"</span>
+</code>
+        </div>
+
+        <h2>14.7 Advanced Verification Techniques</h2>
+
+        <h3>14.7.1 Coverage-Driven Verification</h3>
+        <p>Track which parts of the design have been exercised:</p>
+
+        <div class="code-block">
+<code><span class="keyword">class</span> <span class="type">CoverageCollector</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>):
+        <span class="keyword">self</span>.opcodes_seen = <span class="keyword">set</span>()
+        <span class="keyword">self</span>.registers_written = <span class="keyword">set</span>()
+        <span class="keyword">self</span>.memory_addresses = <span class="keyword">set</span>()
+    
+    <span class="keyword">def</span> <span class="function">sample</span>(<span class="keyword">self</span>, dut):
+        <span class="comment"># Sample current opcode</span>
+        <span class="keyword">if</span> hasattr(dut, <span class="string">'current_opcode'</span>):
+            <span class="keyword">self</span>.opcodes_seen.add(<span class="keyword">int</span>(dut.current_opcode.value))
+    
+    <span class="keyword">def</span> <span class="function">report</span>(<span class="keyword">self</span>):
+        all_opcodes = {<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>, <span class="number">9</span>, <span class="number">15</span>}  <span class="comment"># tiny-gpu opcodes</span>
+        coverage = len(<span class="keyword">self</span>.opcodes_seen) / len(all_opcodes) * <span class="number">100</span>
+        logger.info(f<span class="string">"Opcode coverage: {coverage:.1f}%"</span>)
+        logger.info(f<span class="string">"Missing: {all_opcodes - self.opcodes_seen}"</span>)
+</code>
+        </div>
+
+        <h3>14.7.2 Randomized Testing</h3>
+        <p>Generate random test cases to find edge cases:</p>
+
+        <div class="code-block">
+<code><span class="keyword">import</span> random
+
+<span class="keyword">def</span> <span class="function">generate_random_test</span>(size=<span class="number">8</span>):
+    <span class="string">"""Generate random input data for vector operations."""</span>
+    A = [random.randint(<span class="number">0</span>, <span class="number">127</span>) <span class="keyword">for</span> _ <span class="keyword">in</span> range(size)]
+    B = [random.randint(<span class="number">0</span>, <span class="number">127</span>) <span class="keyword">for</span> _ <span class="keyword">in</span> range(size)]
+    <span class="keyword">return</span> A, B, [a + b <span class="keyword">for</span> a, b <span class="keyword">in</span> zip(A, B)]
+
+<span class="decorator">@cocotb.test()</span>
+<span class="keyword">async def</span> <span class="function">test_random_add</span>(dut):
+    <span class="string">"""Randomized vector addition test."""</span>
+    <span class="keyword">for</span> iteration <span class="keyword">in</span> range(<span class="number">10</span>):  <span class="comment"># Run 10 random tests</span>
+        A, B, expected = generate_random_test()
+        data = A + B
+        
+        <span class="comment"># ... setup and run simulation ...</span>
+        
+        <span class="keyword">for</span> i, exp <span class="keyword">in</span> enumerate(expected):
+            result = data_memory.memory[i + <span class="number">16</span>]
+            <span class="keyword">assert</span> result == exp, f<span class="string">"Iteration {iteration}, index {i}: {result} != {exp}"</span>
+</code>
+        </div>
+
+        <h3>14.7.3 Waveform Debugging</h3>
+        <p>Generate VCD files for waveform analysis:</p>
+
+        <div class="code-block">
+<code><span class="comment"># In Makefile or command line:</span>
+PLUSARGS=+dumpfile=waves.vcd make test_matadd
+
+<span class="comment"># View with GTKWave:</span>
+gtkwave waves.vcd
+</code>
+        </div>
+
+        <h2>14.8 Common Verification Challenges</h2>
+
+        <div class="warning-box">
+            <strong>Pitfalls to Avoid:</strong>
+            <ul style="margin: 10px 0;">
+                <li><strong>Race conditions:</strong> Sample signals at ReadOnly phase, drive at NextTimeStep</li>
+                <li><strong>X/Z propagation:</strong> Initialize all registers; check for unknown values</li>
+                <li><strong>Clock domain crossing:</strong> Use proper synchronizers (if applicable)</li>
+                <li><strong>Memory timing:</strong> Ensure memory model matches expected latency</li>
+                <li><strong>Integer overflow:</strong> 8-bit data can overflow; mask results appropriately</li>
+            </ul>
+        </div>
+
+        <h2>14.9 Exercises</h2>
+
+        <div class="exercise">
+            <h4>Exercise 14.1: Debug a Failing Test</h4>
+            <p>The following test is failing. Identify and explain the bug:</p>
+            <pre><code>data = [1, 2, 3, 4, 5, 6, 7, 8,   # A
+        1, 2, 3, 4, 5, 6, 7, 8]   # B
+# Expected C: [2, 4, 6, 8, 10, 12, 14, 16]
+# Actual C:   [2, 4, 6, 8, 10, 12, 14, 16] ← Passes!
+
+data = [100, 100, 100, 100, 100, 100, 100, 100,  # A
+        100, 100, 100, 100, 100, 100, 100, 100]  # B
+# Expected C: [200, 200, 200, 200, 200, 200, 200, 200]
+# Actual C:   [200, 200, 200, 200, 200, 200, 200, 200] ← Passes!
+
+data = [200, 200, 200, 200, 200, 200, 200, 200,  # A
+        200, 200, 200, 200, 200, 200, 200, 200]  # B
+# Expected C: [400, 400, ...] 
+# Actual C:   [144, 144, ...] ← FAILS!</code></pre>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+                    <p><strong>Bug:</strong> 8-bit integer overflow!</p>
+                    <p>Data memory uses 8-bit values (0-255). When A[i] + B[i] = 400, it overflows:</p>
+                    <p>400 mod 256 = 144</p>
+                    <p><strong>Fix:</strong> Either use wider data (16-bit) or ensure test values don't cause overflow.</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 14.2: Write a Subtraction Test</h4>
+            <p>Create a new test file <code>test_matsub.py</code> that tests vector subtraction: <code>C[i] = A[i] - B[i]</code></p>
+            <p>Hints:</p>
+            <ul>
+                <li>Use SUB instruction (opcode 0010)</li>
+                <li>Handle potential negative results (8-bit unsigned → wraps around)</li>
+            </ul>
+            
+            <details>
+                <summary><strong>Click to reveal solution</strong></summary>
+                <div class="solution">
+<pre><code>program = [
+    0b0101000011011110,  # MUL R0, %blockIdx, %blockDim
+    0b0011000000001111,  # ADD R0, R0, %threadIdx
+    0b1001000100000000,  # CONST R1, #0    ; baseA
+    0b1001001000001000,  # CONST R2, #8    ; baseB
+    0b1001001100010000,  # CONST R3, #16   ; baseC
+    0b0011010000010000,  # ADD R4, R1, R0  ; &amp;A[i]
+    0b0111010001000000,  # LDR R4, R4      ; A[i]
+    0b0011010100100000,  # ADD R5, R2, R0  ; &amp;B[i]
+    0b0111010101010000,  # LDR R5, R5      ; B[i]
+    0b0100011001000101,  # SUB R6, R4, R5  ; A[i] - B[i]  &lt;-- Changed opcode!
+    0b0011011100110000,  # ADD R7, R3, R0  ; &amp;C[i]
+    0b1000000001110110,  # STR R7, R6
+    0b1111000000000000,  # RET
+]
+
+data = [10, 20, 30, 40, 50, 60, 70, 80,  # A
+        5,  10, 15, 20, 25, 30, 35, 40]  # B
+# Expected: [5, 10, 15, 20, 25, 30, 35, 40]
+</code></pre>
+                </div>
+            </details>
+        </div>
+
+        <div class="exercise">
+            <h4>Exercise 14.3: Add Coverage Metrics</h4>
+            <p>Modify the test infrastructure to track:</p>
+            <ol>
+                <li>Which instructions were executed (opcode coverage)</li>
+                <li>Which registers were read/written</li>
+                <li>Which memory addresses were accessed</li>
+            </ol>
+            <p>Print a coverage report at the end of each test.</p>
+        </div>
+
+        <h2>14.10 Key Takeaways</h2>
+
+        <div class="key-takeaway">
+            <p><strong>🧪 Verification consumes 60-70% of design effort:</strong> Hardware bugs are permanent after fabrication. Invest heavily in thorough testing before tape-out.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🐍 cocotb enables Python-based testing:</strong> Write testbenches in Python with access to the entire scientific Python ecosystem. Tests are simulator-agnostic.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🔄 Test structure: Setup → Run → Verify:</strong> Initialize memory, run simulation until completion, then verify results against expected values.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>📊 Coverage matters:</strong> Track which parts of your design have been tested. Aim for 100% functional coverage on critical paths.</p>
+        </div>
+
+        <div class="key-takeaway">
+            <p><strong>🎲 Randomized testing finds edge cases:</strong> Supplement directed tests with random inputs to discover unexpected bugs.</p>
+        </div>
+
+        <div class="nav-container">
+            <a href="chapter-13.html">← Previous: Compiler Design</a>
             <a href="../table-of-contents.html">Table of Contents</a>
-            <a href="chapter-15.html">Next →</a>
+            <a href="chapter-15.html">Next: Microarchitecture Fundamentals →</a>
         </div>
     </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <script src="../navigation.js"></script>
 </body>
 </html>
